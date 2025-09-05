@@ -14,7 +14,7 @@ from torch.nn import functional as F
 
 from src.loom_kernel import triton_loom_wrapper
 from src.loss import compute_loss
-from src.para import batch_size, block_size, sample_k, vocab_size
+from src.para import T1_block_size, T2_block_size
 from src.utils import *
 
 main_device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -28,395 +28,381 @@ class CritiGraph(torch.nn.Module):
     main_distance_lookup_table: torch.Tensor
     main_locations: torch.Tensor
     
-    def __init__(self, h, tp, c, eps, epoch, batch_size, convergence, emb_size, blk_size, division_fact, loss_type):
+    def __init__(self, h, tp, c, emb_size, division_fact, 
+                 loss_strategy, sample_k, epoch_num):
         super().__init__() 
+        ### 1：设备信息
+        self.devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
+        self.streams = [torch.cuda.Stream(device=dev) for dev in self.devices]        
+    
+        ### 2. 基本参数
         self.h = h
         self.tp = tp
         self.n = int(2**h)
         self.c = c
         self.k = int(c*h // division_fact)
-        
-        ### ---- 设备/进程信息 ---- ###
-        self.devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
-        self.streams = [torch.cuda.Stream(device=dev) for dev in self.devices]
-        
-        # self.k = 1
-        self.eps = eps
-        self.epoch = epoch  
-        self.batch_size = batch_size
-        self.flip_masks = (1 << torch.arange(self.h, dtype=torch.int64, device=main_device)).unsqueeze(0).unsqueeze(2) # (1, H, 1)
-        self.flip_masks = [self.flip_masks.clone().to(dev) for dev in self.devices] 
-        self.distance_lookup_table = self.generate_distance_lookup_table()
-        self.distance_lookup_table = [self.distance_lookup_table.clone().to(dev) for dev in self.devices]
-        self.convergence = convergence
+        self.loss_strategy = loss_strategy
         self.emb_size = emb_size
-        self.blk_size = blk_size
+        self.epoch_num = epoch_num
         
-        self.raw_locations = torch.randint(1 - self.n, self.n, (self.emb_size, self.tp), dtype=torch.int64, device='cpu')
-        self.locations = [torch.empty_like(self.raw_locations, device=dev) for dev in self.devices]
-        for i in range(0, len(self.locations)):
-            self.locations[i].copy_(self.raw_locations, non_blocking=True)
+        ### 3. CT Space Embeddings 初始化
+        self.main_locations = torch.randint(1 - self.n, self.n, (self.emb_size, self.tp), dtype=torch.int64, device='cpu', pin_memory=True)
+        self.locations = [self.main_locations.clone().to(dev, non_blocking=True) for dev in self.devices]
         torch.cuda.synchronize()
-        
-        self.loss_type   = loss_type
-        self.sta_TTT     = [None for i in range(len(self.devices))]
-        self.sta_loc_TTT = [None for i in range(len(self.devices))]
-        self.cnc_loc_TTT = [None for i in range(len(self.devices))]
-        self.TTT_epoch   = -1
-        self.sample_k    = sample_k
-        self.TTT_T       = -1
-        self.TTT_ci      = -1
 
+        ### 4. 训练时参数
+        self.epoch = -1
+        self.sample_k = sample_k
 
-        self.register_buffer('main_locations', self.locations[0].clone().cpu())
-        self.main_distance_lookup_table = self.distance_lookup_table[0].clone().cpu()
-        self.debug_epoch = False
-        
-        torch.cuda.empty_cache()
-        
-        
-    def generate_distance_lookup_table(self):
-        xor_results = torch.arange(self.n, dtype=torch.int64, device=main_device)
-        return (torch.floor(torch.log2(xor_results.float() + 1)) + 1) / self.h
     
-    # @torch.jit
-    def distance(self, coord1: torch.Tensor, coord2: torch.Tensor, norm: torch.Tensor, dev_num=0):
-        # sg = torch.sign(coord1) * torch.sign(coord2)
+    @torch.compile()
+    def distance(self, coord1: torch.Tensor, coord2: torch.Tensor, norm: torch.Tensor):
         sg = (((coord1 >= 0).to(torch.int16) << 1) - 1) * (((coord2 >= 0).to(torch.int16) << 1) - 1)
-        # sg = 1 - (((coord1 >= 0) ^ (coord2 >= 0)).to(torch.int16) << 1)
         xor_result = torch.abs(coord1) ^ torch.abs(coord2)
-        # _, exp = torch.frexp((xor_result + 1).to(torch.float32))
-        # s = exp.float() / self.h
-        s = self.distance_lookup_table[dev_num][xor_result]
-        # coord1_norm = self.distance_lookup_table[dev_num][torch.abs(coord1)]
-        # coord2_norm = self.distance_lookup_table[dev_num][torch.abs(coord2)]
-        # sg * (1 - s): shape = (B, T, T, D) 或者 (B, T, T, C, D)
+        _, exp = torch.frexp((xor_result + 1).to(torch.float32))
+        s = exp.float() / self.h
         return sg * (1 - s) * norm
-        # return sg * (1 - s) * coord1_norm * coord2_norm * 5.
     
-    def main_distance(self, coord1: torch.Tensor, coord2: torch.Tensor, norm: torch.Tensor,):
-        coord1, coord2, x_norm = coord1.detach().clone().cpu(), coord2.detach().clone().cpu(), norm.detach().clone().cpu()
-        sg = (((coord1 >= 0).to(torch.int16) << 1) - 1) * (((coord2 >= 0).to(torch.int16) << 1) - 1)
-        xor_result = torch.bitwise_xor(torch.abs(coord1), torch.abs(coord2))
-        s = self.main_distance_lookup_table[xor_result]
-        return sg * (1 - s) * x_norm
     
     def generate_random_masks(self, sz, dev_num=0):
-        upper_bounds = 2**torch.arange(self.h, dtype=torch.int64, device=self.devices[dev_num])
-        random_numbers = torch.randint(0, self.n, (self.h, sz, self.k, self.tp), dtype=torch.int64, device=self.devices[dev_num]) # (H, B*T, K, D)
-        masks = random_numbers % upper_bounds.view(-1, 1, 1, 1)
+        device = self.devices[dev_num] if dev_num >= 0 else 'cpu'
+
+        upper_bounds   = 2 ** torch.arange(self.h, dtype=torch.int64, device=device)
+        random_numbers = torch.randint(0, self.n, (self.h, sz, self.k, self.tp), dtype=torch.int64, device=device) # (H, B*T, K, D)
+        masks = random_numbers & (upper_bounds.view(-1, 1, 1, 1) - 1)
+        # masks = random_numbers % upper_bounds.view(-1, 1, 1, 1)
         return masks.permute(1, 0, 2, 3) # (B*T, H, K, D)
+    
     def connection(self, ori_int, dev_num=0):
-        flipped_ints = ori_int.unsqueeze(1) ^ self.flip_masks[dev_num] # (B*T1, H, D)
+        device = self.devices[dev_num] if dev_num >= 0 else 'cpu'
+        
+        flip_masks = (1 << torch.arange(self.h, device=device, dtype=ori_int.dtype)).unsqueeze(0).unsqueeze(2)
+        flipped_ints = ori_int.unsqueeze(1) ^ flip_masks # (B*T1, H, D)
         random_masks = self.generate_random_masks(flipped_ints.size(0), dev_num=dev_num)
         result = (flipped_ints.unsqueeze(2) ^ random_masks).view(flipped_ints.size(0), self.h*self.k, self.tp)
         # (B*T1, H, 1, D) ^ (B*T1, H, K, D) -> (B*T1, H*K, D)
         loc = torch.cat((result, ori_int.unsqueeze(1), -result), dim=1) # (B*T1, H*K + 1 + H*K, D)
-        indices = torch.randperm(loc.size(1), device=self.devices[dev_num]) 
+        indices = torch.randperm(loc.size(1), device=device) 
         loc = loc[:, indices, :]
         return loc
         
     def calc_loss(self, 
                   ct_val : torch.Tensor, eu_val : torch.Tensor, 
                   mask   : torch.Tensor, lth    : torch.Tensor,
-                  epoch  : int = 0     , mode   : str = 'dyn' ,
-                  sum_dim: int = 2
+                  loss_type: str,
+                  sum_dim  : int = 1
     ) -> torch.Tensor:
-        ### ct_val: (B, T1, T2, C, D), eu_val: (B, T1, T2, C, D)
-        ### mask  : (B, T1, T2, 1, 1), lth   : (B, T1, 1, 1)
-        
-        if mode == 'dyn' or mode == 'TTT':
-            loss = compute_loss(self.loss_type['dyn_loss'],  ct_val, eu_val, lth, mask, sum_dim) # type: ignore
-        elif mode == 'sta':
-            loss = compute_loss(self.loss_type['sta_loss'],  ct_val, eu_val, lth, mask, sum_dim) # type: ignore  
-        elif mode == 'prob':
-            loss = compute_loss(self.loss_type['prob_loss'], ct_val, eu_val, lth, mask, sum_dim) # type: ignore
-        elif mode == 'weighted':
-            loss_dyn  = compute_loss(
-                self.loss_type['dyn_loss'],          # type: ignore
-                ct_val[:, :, :block_size, :, :], 
-                eu_val[:, :, :block_size, :, :], 
-                lth, 
-                mask  [:, :, :block_size, :, :],
-                sum_dim
-            ) # (B, T1, C, tp)
-            loss_prob = compute_loss(
-                self.loss_type['prob_loss'],         # type: ignore
-                ct_val[:, :, block_size:, :, :], 
-                eu_val[:, :, block_size:, :, :], 
-                lth, 
-                mask  [:, :, block_size:, :, :],
-                sum_dim
-            ) # (B, T1, C, tp)
-            loss = self.loss_strategy['ratio_dyn'] * loss_dyn + self.loss_strategy['ratio_prob'] * loss_prob # type: ignore
 
+        loss = compute_loss(loss_type,  ct_val, eu_val, lth, mask, sum_dim) # type: ignore
         return loss # (B, T1, C, tp)
         
         
     
     @torch.no_grad()
     def loom(self, 
-             epoch     : int,           #                , 代表当前是第几个 epoch 
-             b_sta     : torch.Tensor,  # (cB, T1)       , 代表 每个样本在 locations 中的 id        (v 代指 value)
-             b_pos     : torch.Tensor,  # (cB, T2)       , 代表 每个 pos 样本在 locations 中的 id               
-             b_val_v   : torch.Tensor,  # (cB, T1, T2)   , 代表 需要拟合的值
-             # b_val_m   : torch.Tensor,  # (cB, T1, T2)   , 代表 对应位置的值是否有效
-             b_val_n   : torch.Tensor, # (cB, T1, T2)   , 代表 欧式空间的范数乘积
-             # cB 是 current batch size 的意思
-             mode: str,
+             T1_block: Tuple[int, int], T2_block: Tuple[int, int],
+             pos: torch.Tensor, emb: torch.Tensor,
+             loss_type: str,
+             _all_loss: torch.Tensor
     ):
-        train_mode = self.loss_strategy['target'].startswith(mode)
+        ### step 1: 获取基本信息
+        T1 = T1_block[1] - T1_block[0]
+        cT2 = T2_block[1] - T2_block[0]
+        C, D   = 2 * self.k * self.h + 1, self.tp
         
-        cB, T1, T2, D = b_val_v.shape[0], b_val_v.shape[1], b_val_v.shape[2], self.tp
-        splits = torch.linspace(0, cB, len(self.devices) + 1, dtype=torch.int64).tolist()
-        splits = list(map(int, splits))
-        all_selected_locs = torch.zeros((cB, T1, self.tp)    , dtype=torch.int64  , pin_memory=True)
-        all_avg_loss      = torch.zeros((len(self.devices), ), dtype=torch.float32, pin_memory=True)
+        ### step 2: 获取切片
+        splits = torch.linspace(0, cT2, len(self.devices) + 1, dtype=torch.int64)
+        splits = list(map(int, splits.tolist()))
         
+        ### step 3: 开始计算
         for i, (dev, stream, (s, e)) in enumerate(zip(self.devices, self.streams, zip(splits[:-1], splits[1:]))):
-            if s == e: continue
-            B = e - s
+            if s == e: 
+                _all_loss[i].copy_(torch.zeros_like(_all_loss[i], device=_all_loss[i].device), non_blocking=True)
+                continue
+            T2 = e - s
+            r_s, r_e = s + T2_block[0], e + T2_block[0]
             dev_num = i
             
             with torch.cuda.device(dev), torch.cuda.stream(stream): # type: ignore
                 ### 通信1：数据传输开始 ###        
-                sta, pos, val_v, val_n = to_dev(
-                    b_sta, b_pos, b_val_v, b_val_n, 
+                pos_T2, emb_T2 = to_dev(
+                    pos, emb, 
                     device=dev, s=s, e=e
                 )
                 ### 通信1：数据传输结束 ###
-                
+                 
                 
                 ### 计算：计算开始 ###
-                #### step 1: 获取基本信息
-                sta_loc = self.locations[i][sta] # (B, T1, tp)
-                pos_loc = self.locations[i][pos] # (B, T2, tp)
-                dis_sta_pos     = self.distance(
-                    sta_loc[:, :, None, :]   , pos_loc[:, None, :, :]     , val_n[..., None]      , dev_num=dev_num
-                )               # (B, T1, T2, tp)
-                '''
-                # 用 Triton 算子替换掉之前的所有计算, 传递所有需要的输入张量
-                # selected_locs, min_loss = triton_loom_wrapper(
-                #     sta_loc=sta_loc,
-                #     cnc_loc=cnc_loc,
-                #     logits=logits,
-                #     x_norm=x_norm,
-                #     lg=lg,
-                #     mask=mask,
-                # )
-                # tl = min_loss.mean() * B
-                '''
-                if train_mode:
-                    #### step 2: 获取候选位置（的值）
-                    cnc_loc = self.connection(
-                        torch.abs(sta_loc.view(-1, self.tp)), 
-                        dev_num=dev_num
-                    ).view(B, T1, -1, self.tp)       # (B, T1, C, tp)
-                    dis_sta_pos_sum = dis_sta_pos.sum(dim=-1) 
-                                # (B, T1, T2)
-                    dis_cnc_pos     = self.distance(
-                        cnc_loc[:, :, None, :, :], pos_loc[:, None, :, None,:], val_n[..., None, None], dev_num=dev_num
-                    )            # (B, T1, T2, C, tp)
-                    ct_val          = (
-                        dis_sta_pos_sum[:, :, :, None, None] - dis_sta_pos[:, :, :, None, :] + dis_cnc_pos
-                    ) / self.tp  #   (B, T1, T2, C, tp)
-                                #    对于 B 个 batch，T1 个 starting point，向 T2 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
-                    
-                    #### step 3: 计算 loss
-                    ct_val    = ct_val                                                                # (B, T1, T2, C, tp)
-                    eu_val    = val_v[..., None, None].expand(ct_val.shape)                           # (B, T1, T2, C, tp)
-                    mask, lth = self.neighbor_batch(B, T1, T2, epoch, dev_num=dev_num,)               # (B, T1, T2)
-                    loss      = self.calc_loss(ct_val, eu_val, mask[..., None, None], lth[..., None, None], 
-                                               epoch=epoch, mode=mode)                                # (B, T1, C, tp)
-                    
-                    
-                    #### step 4: 挑选 loss 最小的位置
-                    indices       = torch.argmin(loss, dim=2)                                         # (B, T1, tp)
-                    batch_indices = torch.arange(B,       device=dev)[:, None, None]
-                    time_indices  = torch.arange(T1,      device=dev)[None, :, None]
-                    dim_indices   = torch.arange(self.tp, device=dev)[None, None, :]
-                    selected_locs = cnc_loc[batch_indices, time_indices, indices, dim_indices]        # (B, T1, tp)
-                    avg_loss      = loss   [batch_indices, time_indices, indices, dim_indices].mean() * B
-                else:
-                    ct_val        = dis_sta_pos.mean(dim=-1)                                          # (B, T1, T2)
-                    eu_val        = val_v                                                             # (B, T1, T2)
-                    mask, lth     = self.neighbor_batch(B, T1, T2, -1, dev_num=dev_num,)        # (B, T1, T2)
-                    loss          = self.calc_loss(ct_val, eu_val, mask, lth, 
-                                                   epoch=epoch, mode=mode)                            # (B, T1)
-                    avg_loss      = loss.mean() * B
-                    selected_locs = torch.empty((B, T1, self.tp), dtype=torch.int64, device=dev)      # (B, T1, tp)
-                                                            
+                #### step 3.0: 计算欧式空间的值
+                emb_T1 = self.emb_T1[i] # (T1, dim)                
+                val_v, val_n = normalized_matmul(emb_T1, emb_T2.t(), ori_prod=(loss_type == 'kl' or loss_type == 'js')) # (T1, T2) 
+                if loss_type == 'kl' or loss_type == 'js':
+                    val_v = self.targets_T1[i][T1_block[0]:T1_block[1], s:e].to(torch.float32) # (T1, T2)
                 
+                #### step 3.1: 获取基本信息
+                sta_loc = self.sta_loc_T1[i] # (T1, tp)
+                pos_loc = self.locations[i][pos_T2] # (T2, tp)
+                dis_sta_pos     = self.distance(
+                    sta_loc[:, None, :]   , pos_loc[None, :, :]     , val_n[..., None]      
+                )               # (T1, T2, tp)
+                
+                #### step 2: 获取候选位置（的值）
+                cnc_loc = self.cnc_loc_T1[i] # (T1, C, tp)
+                dis_sta_pos_sum = dis_sta_pos.sum(dim=-1) 
+                             # (T1, T2)
+                dis_cnc_pos     = self.distance(
+                    cnc_loc[:, None, :, :], pos_loc[None, :, None,:], val_n[..., None, None]
+                )            # (T1, T2, C, tp)
+                ct_val          = (
+                    dis_sta_pos_sum[:, :, None, None] - dis_sta_pos[:, :, None, :] + dis_cnc_pos
+                ) / self.tp  # (T1, T2, C, tp)
+                             # 对于 T1 个 starting point，向 T2 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
+                
+                #### step 3: 计算 loss
+                ct_val    = ct_val                                                                # (T1, T2, C, tp)
+                eu_val    = val_v[..., None, None].expand(ct_val.shape)                           # (T1, T2, C, tp)
+                mask, lth = self.get_neighbor(T1, r_s, r_e, -1, -1, dev_num=dev_num,)             # (T1, T2)
+                loss      = self.calc_loss(ct_val, eu_val, mask[..., None, None], lth[..., None, None], 
+                                           loss_type=loss_type)                                   # (T1, C, tp)           
                 ### 计算：计算结束 ###
                 
                 ### 通信2：数据传输开始 ###
-                all_selected_locs[s:e].copy_(selected_locs.to(dtype=torch.int64), non_blocking=True)
-                all_avg_loss[i].copy_(avg_loss, non_blocking=True)
+                _all_loss[i].copy_(loss, non_blocking=True)
                 ### 通信2：数据传输结束 ###
         
         for i, stream in enumerate(self.streams):
             stream.synchronize()
         
-        if train_mode:
-            ### 更新与计算 ###
-            for i, dev in enumerate(self.devices):
-                self.locations[i].index_copy_(
-                    0,                                             # dim=0, 沿行更新
-                    b_sta.to(dev, non_blocking=True).view(-1),     # 哪些行
-                    all_selected_locs.to(dev, non_blocking=True).view(-1, self.tp)   # 更新的数据
-                )
-        
-        return all_avg_loss.sum().item() / cB
+        return _all_loss.sum(dim=0) # (T1, C, tp)
 
 
-    # @timeit(name=f'neighbor_batch 函数主体')
-    def neighbor_batch(self, B: int, T1: int, T2: int, epoch: int = 0, dev_num: int = 0, mark: Optional[Mark] = None) -> Tuple[torch.Tensor, torch.Tensor]:
-        device = self.devices[dev_num]
+    def get_neighbor(
+        self,
+        T1: int, T2_l: int, T2_r: int,
+        idx_s: int, idx_e: int,
+        dev_num: int = 0
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        返回:
+            valid_mask: (B, cT)  布尔张量
+            counts    : (B,)     float32
+        说明:
+            - 内部持久化:
+                self.choosing_mask: (B,)  bool
+                self.valid_samples: (B, k) int64，"全选"行填 -1
+                self.all_idx: (n_all,) long，全选批次索引
+                self.sel_idx: (n_sel,) long，非全选批次索引
+                self.samples: (n_sel, k) int64，非全选批次的全局采样
+        """
+        device = self.devices[dev_num] if dev_num >= 0 else 'cpu'
+        cT2 = int(T2_r - T2_l)
 
-        # 收敛期：建议缓存这两个返回，避免每次重分配
-        if (self.loss_strategy['converge'] is not None and epoch > self.loss_strategy['converge']) or epoch == -1:
-            valid_mask = torch.ones((B, T1, T2), dtype=torch.bool, device=device)
-            counts = torch.full((B, T1), T2, dtype=torch.float32, device=device)
+        # 收敛期：与旧逻辑一致
+        if (self.loss_strategy['converge'] is not None and self.epoch > self.loss_strategy['converge']) or self.epoch == -1:
+            valid_mask = torch.ones((T1, cT2), dtype=torch.bool, device=device)
+            counts = torch.full((T1,), float(cT2), dtype=torch.float32, device=device)
             return valid_mask, counts
 
-        # 80% 行全选；20% 行仅选 1 个
-        choosing_mask = (torch.rand((B, T1), device=device) > 0.2)                 # (B,T1)
+        # ---------- 初始化 choosing_mask 与 valid_samples ----------
+        if getattr(self, "valid_samples", None) is None:
+            # 80% 全选；20% 只用 k 个全局位置
+            self.choosing_mask = (torch.rand((T1,), device=device) > 0.2)  # True=全选
+            k_eff = self.sample_k
 
-        # 为“仅选1个”的行生成 one-hot，不做任何散乱写
-        t2_idx   = torch.randint(T2, (B, T1), device=device)                        # (B,T1)
-        one_hot  = torch.nn.functional.one_hot(t2_idx, num_classes=T2).to(torch.bool)  # (B,T1,T2)
+            # 占位: -1
+            self.valid_samples = torch.full(
+                (T1, k_eff),
+                -1,
+                dtype=torch.int64,
+                device=device,
+            )
 
-        # 扩展 choosing_mask 并合成最终 mask：选中行→全 True；未选中行→对应 one-hot
-        choosing_mask_3d = choosing_mask.unsqueeze(-1)                              # (B,T1,1)
-        valid_mask = torch.where(choosing_mask_3d, 
-                                torch.ones((B, T1, T2), dtype=torch.bool, device=device),
-                                one_hot)
+            # 分批次索引持久化
+            self.all_idx = self.choosing_mask.nonzero(as_tuple=False).squeeze(1)   # 全选批次
+            self.sel_idx = (~self.choosing_mask).nonzero(as_tuple=False).squeeze(1)  # 非全选批次
 
-        # 计数同样用分支消除
-        counts = torch.where(choosing_mask, 
-                            torch.full((B, T1), T2, dtype=torch.float32, device=device),
-                            torch.ones((B, T1), dtype=torch.float32, device=device))
+            # 对 20% 的“非全选”批次抽样
+            picked = torch.randint(
+                low=idx_s,
+                high=idx_e,
+                size=(self.sel_idx.numel(), k_eff),
+                device=device,
+                dtype=torch.int64
+            )  # (num_sel, k_eff)
+            self.valid_samples[self.sel_idx] = picked
+
+            # 预存非全选的采样
+            self.samples = self.valid_samples.index_select(0, self.sel_idx)  # (m, k_eff)
+            
+            # 将所有生成的 self.xxx 变量迁移到各个设备
+            self.choosing_mask = [self.choosing_mask.to(device) for device in self.devices]
+            self.valid_samples = [self.valid_samples.to(device) for device in self.devices]
+            self.all_idx = [self.all_idx.to(device) for device in self.devices]
+            self.sel_idx = [self.sel_idx.to(device) for device in self.devices]
+            self.samples = [self.samples.to(device) for device in self.devices]
+            
+            return None, None
+
+        # ---------- 基于当前切片 [cT_l, cT_r) 生成局部 mask 与 counts ----------
+        
+        pos = self.samples[dev_num] - int(T2_l)                   # (m, k)
+        in_slice = (pos >= 0) & (pos < cT2)               # (m, k)
+        if not in_slice.any():
+            valid_mask = torch.ones((T1, cT2), dtype=torch.bool, device=device)
+            counts = torch.full((T1,), float(cT2), dtype=torch.float32, device=device)
+            return valid_mask, counts
+        
+        # 存在局部采样
+        valid_mask = torch.zeros((T1, cT2), dtype=torch.bool, device=device)
+        counts = torch.zeros((T1,), dtype=torch.float32, device=device)
+        
+        valid_mask[self.all_idx[dev_num]] = True
+        counts[self.all_idx[dev_num]] = float(cT2)
+        counts[self.sel_idx[dev_num]] = in_slice.sum(dim=1).to(torch.float32) + 1e-12
+        
+        rc = torch.nonzero(in_slice, as_tuple=False) # (p, 2)
+        b_idx = self.sel_idx[dev_num][rc[:, 0]]               # (p,)
+        cols = pos[rc[:, 0], rc[:, 1]].to(torch.int64)  # (p,)
+        valid_mask[b_idx, cols] = True
+
         return valid_mask, counts
 
-
-    # @timeit(name=f'cte 函数主体')
+    @timeit(name=f'cte 函数主体')
     def forward(self,        
-                sta     : torch.Tensor, # (B, T+V)     , 代表 每个 sta 样本在 locations 中的 id 
-                pos     : torch.Tensor, # (B, T+V)     , 代表 每个 pos 样本在 locations 中的 id 
-                val_v   : torch.Tensor, # (B, T+V, T+V), 代表 欧式空间待拟合的值              
-                val_m   : torch.Tensor, # (B, T+V, T+V), 代表 余弦相似度是否有效
-                val_n   : torch.Tensor, # (B, T+V, T+V), 代表 欧式空间的范数乘积，除了 prob 对应的位置之外用 1.0 填充
-                targets : Optional[torch.Tensor] = None, 
-                mark    : Optional[Mark] = None
-                # (0:B, 0:T  , 0:T)   代表着 dynamic embeddings 的内积
-                # (0:B, T:T+V, T:T+V) 代表着 static  embeddings 的内积
-                # (0:B, 0:T  , T:T+V) 代表着 logits, 准备用于概率分布计算
+                t_eu_emb  : torch.Tensor, # (N_train, dim), pinned memory
+                t_targets : torch.Tensor, # (N_train, )   , pinned memory
+                v_eu_emb  : torch.Tensor, # (N_valid, dim), pinned memory
+                v_targets : torch.Tensor, # (N_valid, )   , pinned memory
+                vocab_emb : torch.Tensor, # (vocab_size, dim), pinned memory
+                t_idx     : torch.Tensor, # (N_train, )   , pinned memory
+                v_idx     : torch.Tensor, # (N_valid, )   , pinned memory
+                vocab_idx : torch.Tensor, # (vocab_size, ), pinned memory
+                mark      : Optional[Mark] = None,
+                ### 以上张量全部放在 cpu，避免占用 gpu 内存
         ): 
-        # assert mark is not None # 保证计时器存在
-        T, V = block_size, vocab_size
-        ### 1. 生成用于传输数据的张量
-        # mark("pinned 张量生成")
-        pinned = pinned_copy_by_name(
-            named(sta=sta, pos=pos, 
-                  val_v=val_v, val_m=val_m, val_n=val_n)
-        )
-        (sta, pos, val_v, val_m, val_n) = (
-            pinned['sta'], pinned['pos'], 
-            pinned['val_v'], pinned['val_m'], pinned['val_n']
-        ) 
+        ### step 1: 获取基本信息
+        N_train, N_valid, vocab_size = t_eu_emb.size(0), v_eu_emb.size(0), vocab_idx.size(0)
+        # 在这里，我们需要拟合的是一个 (N_train + N_valid, N_train + vocab_size) 的矩阵
+        # 所以，外层循环遍历第一维，根据 T1_block_size 来划分
+        # 内层循环遍历第二维，根据 T2_block_size 来划分
+        t_T1_splits     = make_splits(0, N_train, T1_block_size)
+        v_T1_splits     = make_splits(N_train, N_train + N_valid, T1_block_size)
+        vocab_T1_splits = [(N_train + N_valid, N_train + N_valid + vocab_size)] 
+        T1_splits       = t_T1_splits + v_T1_splits + vocab_T1_splits
+        
+        t_T2_splits     = make_splits(0, N_train, T2_block_size)
+        vocab_T2_splits = [(N_train, N_train + vocab_size)]
+        T2_splits       = t_T2_splits + vocab_T2_splits
+        
+        ### step 2: 准备训练时变量
+        cur_T1_type, cur_T2_type, cur_loss_type = "train", "train", "dyn" 
+        neighbor_idx = {"train": (0, N_train + vocab_size), "valid": (0, N_train), "vocab": (N_train, N_train + vocab_size)}
+        _all_loss = torch.empty((len(self.devices), T1_block_size, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True)
+        # (num_dev, T1_block_size, C, tp)
+        
+        ### step 3: 遍历所有 epoch
+        for epoch in range(self.epoch_num):
+            self.epoch = epoch
 
-        dyn_loss, sta_loss, prob_loss = 0.0, 0.0, 0.0
-        ### 2. 遍历每个 epoch
-        for epoch in range(self.epoch): 
-            # if epoch < self.epoch * 0.85:  
+            ### step 3.1: 训练
+            for T1_block in T1_splits:
+                all_loss = torch.zeros((T1_block_size, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, device=self.devices[0])
+                
+                cur_T1_type   = get_T1_type(T1_block, N_train, N_valid, vocab_size)
+                emb_T1        = get_T1_emb (T1_block, t_eu_emb, v_eu_emb, vocab_emb, N_train, N_valid, vocab_size) # (T1_block_size, dim)
+                sta_T1        = get_T1_idx (T1_block, t_idx, v_idx, vocab_idx, N_train, N_valid, vocab_size)       # (T1_block_size, )
+                targets_T1    = get_T1_targets (T1_block, t_targets, N_train, N_valid, vocab_size)                 # (T1_block_size, )  
+                targets_T1    = F.one_hot(targets_T1, num_classes=vocab_size) * 1e2                                # (T1_block_size, vocab_size)   
+                self.get_neighbor(T1_block[1] - T1_block[0], -1, -1, 
+                                *neighbor_idx[cur_T1_type],
+                                dev_num=-1) 
+                
+                sta_loc_T1    = self.main_locations[sta_T1]                          # (T1_block_size, tp)
+                cnc_loc_T1    = self.connection(sta_loc_T1, dev_num=-1)              # (T1_block_size, C, tp)
+                
+                
+                self.emb_T1     = [emb_T1.to(dev, non_blocking=True) for dev in self.devices]
+                self.targets_T1 = [targets_T1.to(dev, non_blocking=True) for dev in self.devices]
+                self.sta_T1     = [sta_T1.to(dev, non_blocking=True) for dev in self.devices]
+                self.sta_loc_T1 = [sta_loc_T1.to(dev, non_blocking=True) for dev in self.devices]
+                self.cnc_loc_T1 = [cnc_loc_T1.to(dev, non_blocking=True) for dev in self.devices]
+                
+                torch.cuda.synchronize()
+                
+                for T2_block in T2_splits:
+                    cur_T2_type   = get_T2_type(T2_block, N_train, vocab_size)
+                    
+                    if (cur_T1_type == "valid" and cur_T2_type == "vocab") or \
+                    (cur_T1_type == "vocab" and cur_T2_type == "train"):
+                        continue
+                    
+                    cur_loss_type = get_loss_type(cur_T1_type, cur_T2_type, self.loss_strategy)
+                    emb_T2      = get_T2_emb (T2_block, t_eu_emb, vocab_emb, N_train, vocab_size) # (T2_block_size, dim)
+                    pos_T2      = get_T2_idx (T2_block, t_idx, vocab_idx, N_train, vocab_size)    # (T2_block_size, )
+                    cur_loss    = self.loom(T1_block, T2_block, pos_T2, emb_T2, cur_loss_type, _all_loss) # (T1_block_size, C, tp)
+
+                    if cur_T1_type == "train" and T2_block == vocab_T2_splits[-1]:
+                        all_loss    = self.loss_strategy['ratio_dyn']  * all_loss / N_train + \
+                                      self.loss_strategy['ratio_prob'] * cur_loss.to(all_loss.device, non_blocking=True) / vocab_size                    
+                    else:
+                        all_loss   += cur_loss.to(all_loss.device, non_blocking=True)
+                        if cur_T1_type == "valid" and T2_block == t_T2_splits[-1]:
+                            all_loss = all_loss / N_valid 
+                        elif cur_T1_type == "vocab" and T2_block == vocab_T2_splits[-1]:
+                            all_loss = all_loss / N_valid if cur_T1_type == "valid" else all_loss / vocab_size
+                        
+                self.update(all_loss)
             
-            self.loss_strategy: PhaseConfig = get_strategy(self.loss_type, epoch)
-            if self.loss_strategy['target'] == 'TTT_only':
-                TTT_loss = self.loom(        epoch, sta            , pos            , val_v                   , val_n                   ,
-                mode='TTT')
-                if epoch == self.epoch - 1:
-                    print(f"current epoch: {epoch}, TTT_loss: {fmt6w(TTT_loss)}")
-                continue
-            
-            if self.loss_strategy['target'] == 'weighted_dyn_prob':
-                self.loom(        epoch, sta[:,  :T]    , pos[:,   :]    , val_v[:,  :T,    : ]    , val_n[:,  :T,    : ]    ,
-                mode='weighted')
-            
-            dyn_loss  = self.loom(epoch, sta[:,  :T]    , pos[:,   :T]   , val_v[:,  :T,    :T]    , val_n[:,  :T,    :T]    ,
-                mode='dyn')
-            sta_loss  = self.loom(epoch, sta[0:1, T:T+V], pos[0:1, T:T+V], val_v[0:1, T:T+V, T:T+V], val_n[0:1, T:T+V, T:T+V],
-                mode='sta')
-            prob_loss = self.loom(epoch, sta[:,  :T]    , pos[:, T:T+V]  , val_v[:,  :T,   T:T+V]  , val_n[:,  :T,   T:T+V]  ,
-                mode='prob')
-            print(f"current epoch: {epoch}, dyn_loss: {fmt6w(dyn_loss)}, sta_loss: {fmt6w(sta_loss)}, prob_loss: {fmt6w(prob_loss)}")
-        
-        
+            ### step 3.2: 验证
+            for split in ['train', 'valid']:
+                splits  = t_T1_splits if split == 'train' else v_T1_splits
+                dyn_idx = t_idx       if split == 'train' else v_idx
+                dyn_emb = t_eu_emb    if split == 'train' else v_eu_emb
+                targets = t_targets   if split == 'train' else v_targets
+                N       = N_train     if split == 'train' else N_valid
+                loss    = 0
+                
+                for block in splits:
+                    Tl, Tr  = block
+                    dyn_loc     = self.locations[0][dyn_idx[Tl:Tr].to(self.devices[0], non_blocking=True)] # (T1, tp)
+                    vocab_loc   = self.locations[0][vocab_idx.to(self.devices[0], non_blocking=True)] # (N_vocab, tp)
+                    _, norm = normalized_matmul(
+                        dyn_emb. to(self.devices[0], non_blocking=True), 
+                        vocab_emb.to(self.devices[0], non_blocking=True).t()
+                    ) # (T1, N_vocab)
+                    ct_val  = self.distance(dyn_loc[:, None, :], vocab_loc[None, :, :], norm[:, None])
+                    loss  = F.cross_entropy(ct_val, targets[Tl:Tr].to(self.devices[0], non_blocking=True), reduction='mean').item() * (Tr - Tl)
+                
+                loss = loss / N
+                print(f"epoch {epoch:3d}, {split:5s} loss: {loss:.4f}")
         
 
-        ### 3. 保存并返回 (B, T, V) 的 logits
-        self.main_locations = self.locations[0].clone().cpu()
-        
-        if self.loss_strategy['target'] != 'TTT_only':
-            return self.distance(self.locations[0][sta[:, :T].to(self.devices[0])].unsqueeze(2),    # (B, T, 1, tp)
-                                self.locations[0][pos[:, T:T+V].to(self.devices[0])].unsqueeze(1), # (B, 1, V, tp)
-                                val_n[:, :T, T:T+V, None].to(self.devices[0]),                     # (B, T, V, 1)
-                                dev_num=0).mean(dim=-1)                        # (B, T, V)
-
-    # @timeit(name=f'cte 函数主体')
-    def forward_TTT(
-        self,        
-        sta     : torch.Tensor, # (B)     , 代表 每个 sta 样本在 locations 中的 id 
-        pos     : torch.Tensor, # (T)     , 代表 每个 pos 样本在 locations 中的 id 
-        val_v   : torch.Tensor, # (B, T)  , 代表 欧式空间待拟合的值              
-        val_n   : torch.Tensor, # (B, T)  , 代表 欧式空间的范数乘积，除了 prob 对应的位置之外用 1.0 填充,
-    ):        
-        # assert mark is not None # 保证计时器存在
-        B, T, V = sta.size(0), block_size, vocab_size
-        ### 1. 生成用于传输数据的张量
-        # mark("pinned 张量生成")
-        pinned = pinned_copy_by_name(
-            named(sta=sta, pos=pos, 
-                  val_v=val_v, val_n=val_n)
-        )
-        (sta, pos, val_v, val_n) = (
-            pinned['sta'], pinned['pos'], 
-            pinned['val_v'], pinned['val_n']
-        ) 
-
-
-        ### 2. 
-        self.loss_strategy: PhaseConfig = get_strategy(self.loss_type, -1)
-        if self.loss_strategy['target'] == 'TTT_only':
-            TTT_loss = self.loom_TTT(sta, pos, val_v, val_n, mode='TTT') # (B, C, tp)
-            return TTT_loss    
-        
-    def update_TTT(
+    def update(
         self, 
-        TTT_loss: torch.Tensor # (B, C, tp)
+        loss: torch.Tensor # (T1, C, tp)
     ):
-        assert self.sta_TTT[0] is not None, "请先运行 forward_TTT 方法以初始化 TTT 状态"
-        assert self.cnc_loc_TTT[0] is not None, "请先运行 forward_TTT 方法以初始化 TTT 状态"
 
-
-
-        TTT_loss      = TTT_loss.to(self.devices[0])
-        indices       = torch.argmin(TTT_loss, dim=1)                                                # (B, tp)
-        batch_indices = torch.arange(self.sta_TTT[0].size(0), device=self.devices[0])[:, None]       # (B, 1)
-        dim_indices   = torch.arange(self.tp    ,             device=self.devices[0])[None :]        # (1, tp)
-        selected_locs = self.cnc_loc_TTT[0][batch_indices, indices, dim_indices]        # (B, tp)
+        indices       = torch.argmin(loss, dim=1)                                                # (T1, tp)
+        batch_indices = torch.arange(self.sta_loc_T1[0].size(0), device=self.devices[0])[:, None]   # (T1, 1)
+        dim_indices   = torch.arange(self.tp    ,             device=self.devices[0])[None :]    # (1, tp)
+        selected_locs = self.cnc_loc_T1[0][batch_indices, indices, dim_indices]                  # (T1, tp)
 
         for i, dev in enumerate(self.devices):
             self.locations[i].index_copy_(
                 0,                                             # dim=0, 沿行更新
-                self.sta_TTT[i].to(dev, non_blocking=True).view(-1),     # 哪些行
+                self.sta_T1[i].view(-1),     # 哪些行
                 selected_locs.to(dev, non_blocking=True).view(-1, self.tp)   # 更新的数据
             )
-        self.main_locations = self.locations[0].clone().cpu()
+        self.main_locations.index_copy_(
+            0,
+            self.sta_T1[0].cpu().view(-1),
+            selected_locs.cpu().view(-1, self.tp)
+        )
         
         # 全局重置
-        self.sta_TTT      = [None for _ in range(len(self.devices))]
-        self.sta_loc_TTT  = [None for _ in range(len(self.devices))]
-        self.cnc_loc_TTT  = [None for _ in range(len(self.devices))]
+        self.sta_T1        = [None for _ in range(len(self.devices))]
+        self.sta_loc_T1    = [None for _ in range(len(self.devices))]
+        self.cnc_loc_T1    = [None for _ in range(len(self.devices))]
         self.valid_samples = None
 
 if __name__ == "__main__":

@@ -1,12 +1,22 @@
 import json
 import os
 import random
+import warnings
 from datetime import datetime
 
 import torch
 import torch.nn as nn
 from rotary_embedding_torch import RotaryEmbedding
+from safetensors.torch import load_file, save_file
 from torch.nn import functional as F
+from tqdm import tqdm
+
+# 仅屏蔽这类 FutureWarning（全局或在特定代码块前）
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=r"You are using `torch\.load` with `weights_only=False`"
+)
 
 from src.cte import *
 from src.para import *
@@ -22,34 +32,31 @@ decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integ
 # Train and test splits
 data = torch.tensor(encode(text), dtype=torch.long, pin_memory=True)
 text_size = len(data)
-datai = torch.tensor([i * block_size for i in range(text_size)], dtype=torch.long, pin_memory=True)
+# datai = torch.tensor([i * block_size for i in range(text_size)], dtype=torch.long)
 n = int(0.9*text_size) # first 90% will be train, rest val
 train_data = data[:n]
 val_data = data[n:]
-train_datai = datai[:n]
-val_datai = datai[n:]
-
-da = (torch.arange(vocab_size) + text_size * block_size).unsqueeze(0).expand(batch_size, -1) # (B, vocab_size)
 
 # Train Cache
 _train_cache = []
 
 # data loading
-def get_batch(split, ix=None):
-    # generate a small batch of data of inputs x and targets y
+def get_batch(split, bs=None, ix=None, to_cuda=False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     data = train_data if split == 'train' else val_data
-    datai = train_datai if split == 'train' else val_datai
+    if bs is None:
+        bs = batch_size
     if ix is None:
-        ix = torch.randint(len(data) - block_size, (batch_size,))
-    x = torch.stack([data[i:i+block_size] for i in ix])
-    xi = torch.stack([datai[i:i+block_size] for i in ix])
-    xi_pad = torch.arange(0, block_size).unsqueeze(0)
-    xi = xi + xi_pad
+        ix = torch.randint(len(data) - block_size, (bs,))
     
-    xi = torch.cat((xi, da[0:1].repeat(xi.size(0), 1)), dim=1)
-    y = torch.stack([data[i+1:i+block_size+1] for i in ix])
-    x, xi, y = x.to(device), xi.to(device), y.to(device)
-    return x, xi, y, ix
+    x = torch.stack([data[i : i+block_size] for i in ix])
+    y = torch.stack([data[i+1 : i+block_size+1] for i in ix])
+    
+    if to_cuda:
+        x, y, ix = x.to(device, non_blocking=True), y.to(device, non_blocking=True), ix.to(device, non_blocking=True),
+    return x, y, ix
+
+
+    
 
 class Head(nn.Module):
     """ one head of self-attention """
@@ -160,25 +167,9 @@ class GPTLanguageModel(nn.Module):
         return loss_eu
 
 
-@torch.no_grad()
-def evaluate(model: GPTLanguageModel):
-    out = {}
-    model.eval()
-    for split in ['train', 'val']:
-        losses_ori = torch.zeros(eval_iters)
-        losses_cts = torch.zeros(eval_iters)
-        losses_gap = torch.zeros(eval_iters)
-        for k in range(eval_iters):
-            X, XI, Y, _ = get_batch(split)
-            _, loss_ori, loss_cts, loss_gap = model(X, XI, targets=Y, evaluation=1)
-            losses_ori[k] = loss_ori.item()
-            losses_cts[k] = loss_cts.item()
-            losses_gap[k] = loss_gap.item()
-        out[split] = [losses_ori.mean(), losses_cts.mean(), losses_gap.mean()]
-    model.train()
-    return out
 
 
+################ ------------- GPT 训练与评估 ------------- ################
 def train_gpt(gpt_ckpt: str):
     model: GPTLanguageModel = GPTLanguageModel().to(device)
     # print the number of parameters in the model
@@ -187,8 +178,8 @@ def train_gpt(gpt_ckpt: str):
     running_loss = []
     for iter in range(max_iters):
         
-        xb, xi, yb, _ = get_batch('train')
-        loss = model(xb, xi, targets=yb)
+        xb, yb, _ = get_batch('train', to_cuda=True)
+        loss = model(xb, yb)
         optimizer.zero_grad(set_to_none=True)
         running_loss.append(loss.item())
         loss.backward()
@@ -199,36 +190,105 @@ def train_gpt(gpt_ckpt: str):
             running_loss = []
             torch.save(model.state_dict(), os.path.join(gpt_path, gpt_ckpt.format(iter)))
 
-@torch.no_grad()
-def train_cte(gpt_cktp: str, cte_cktp: str, train_cache_cktp: str):
+def eval_gpt(gpt_ckpt: str):
     model: GPTLanguageModel = GPTLanguageModel()
-    model_cktp = torch.load(gpt_cktp, map_location='cpu')
-    
-    load_partial_state_dict(model, model_cktp, skip_substrings=["cte"], strict=False)
-    del model.cte
-    
-    torch.cuda.empty_cache()
-    model.cte = CritiGraph(h, tp, c, eps, epoch_cte, batch_size_cte, convergence, text_size * block_size + vocab_size, block_size + vocab_size, division_fact, loss_type)
-    
+    model_cktp = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
+    model.load_state_dict(model_cktp)
     model = model.to(device)
-    
     model.eval()
-    for iter in range(max_iters):
-        if iter % cte_save_interval == 0 or iter == max_iters - 1: 
-            visualization = True
-        else:
-            visualization = False
-        
-        xb, xi, yb, ix = get_batch('train')
-        _train_cache.append(ix)
-        
-        _, loss_eu, loss_ct, _, var = model(xb, xi, targets=yb, train_cte=1, visualization=visualization)
-        print(f"current train iter: {iter}, loss_eu: {fmt6w(loss_eu.item())}, loss_ct: {loss_ct.item()}")
-        
-        if visualization:    
-            visualize_similarity(model, var, iter)
-            torch.save(model.cte.state_dict(), cte_cktp.format(iter))
-            torch.save(_train_cache, train_cache_cktp.format(iter))
+    
+    all_loss = []
+    for iter in tqdm(range(val_max_iters)):
+        xb, yb, _ = get_batch('val', to_cuda=True)
+        loss = model(xb, yb)
+        all_loss.append(loss.item())
+    
+    print(f"gpt eval loss: {sum(all_loss) / len(all_loss)}")
+
+################ ------------- 从 GPT 到 CTE ------------- ################
+
+@torch.no_grad()
+def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
+    ### step 0: 准备模型
+    model: GPTLanguageModel = GPTLanguageModel()
+    model_cktp = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
+    model.load_state_dict(model_cktp)
+    model = model.to(device)
+    model.eval()
+    
+    ### step 1: 准备基本数据
+    train_y, train_emb = [], []
+    eval_y, eval_emb = [], []
+    cache_save_path = os.path.join(cache_path, cache_save_path)
+    
+    ### step 2: 迭代获取动态嵌入（dyn_emb）与数据元信息（ix）
+    for _ in range(cte_train_iters):
+        X_train, Y_train, _ = get_batch('train', bs=cte_train_bs, to_cuda=True)
+        dyn_emb: torch.Tensor = model(X_train, targets=Y_train, return_dyn_emb=True)
+        train_y.append(Y_train.cpu())
+        train_emb.append(dyn_emb.cpu())
+    
+    for _ in range(cte_eval_iters):
+        X_val, Y_val, _ = get_batch('val', bs=cte_eval_bs, to_cuda=True)
+        dyn_emb: torch.Tensor = model(X_val, targets=Y_val, return_dyn_emb=True)
+        eval_y.append(Y_val.cpu())
+        eval_emb.append(dyn_emb.cpu())
+    
+    ### step 3: 拼接并保存
+    train_cache = {
+        'y': torch.stack(train_y, dim=0).reshape(-1),  # (cte_train_iters * cte_train_bs * block_size)
+        'emb': torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs * block_size, n_embd)
+    }
+    eval_cache = {
+        'y': torch.stack(eval_y, dim=0).reshape(-1),   # (cte_eval_iters  * cte_eval_bs  * block_size)
+        'emb': torch.stack(eval_emb, dim=0).reshape(-1, n_embd)  # (cte_eval_iters   * cte_eval_bs * block_size, n_embd)
+    }
+    train_cache_length = train_cache['emb'].shape[0] 
+    eval_cache_length = eval_cache['emb'].shape[0]
+    
+    print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
+    save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
+    # save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
+
+################ ------------- 训练 CTE ------------- ################
+
+@torch.no_grad()
+def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int,):
+    ### step 1: 读取缓存，并 pin 在 cpu。根据计算，10 ** 7 时也仅占用 15 GB
+    train_cache = load_file(os.path.join(cache_path, cache_cktp.format(train_length, 'train')), device='cpu')
+    eval_cache = load_file(os.path.join(cache_path, cache_cktp.format(val_length, 'val')), device='cpu')
+    train_cache, eval_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(eval_cache)
+    
+    ### step 2: 初始化 GPT 和 CTE
+    emb_size = train_length + val_length + vocab_size
+    cte = CritiGraph(h, tp, c, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
+    cte.eval()
+    
+    gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
+    sta_emb = gpt_weights['token_embedding_table.weight']  # type: ignore
+    
+    ### step 3: 基本数据
+    train_ix = torch.arange(train_length, dtype=torch.long, device='cpu', pin_memory=True)                             # (train_length,)
+    eval_ix  = torch.arange(train_length, train_length + val_length, dtype=torch.long, device='cpu', pin_memory=True)  # (val_length,)
+    vocab_ix = torch.arange(train_length + val_length, emb_size, dtype=torch.long, device='cpu', pin_memory=True)      # (vocab_size,)
+    
+    ### step 4: 开始训练并同时测试
+    #### step 4.1: 直接测 GPT 就好, 这里是在 cpu 上的，不要占 cuda 内存
+    train_logits_eu = train_cache['emb'] @ sta_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
+    train_loss_eu = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
+    eval_logits_eu = eval_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
+    eval_loss_eu = F.cross_entropy(eval_logits_eu.view(-1, eval_logits_eu.size(-1)), eval_cache['y'], reduction='mean')
+    print(f"Before CTE Training: train eu loss: {train_loss_eu.item()}, eval eu loss: {eval_loss_eu.item()}")
+    
+    #### step 4.2: CTE 训练与测试
+    cte(train_cache['emb'], train_cache['y'], eval_cache['emb'], eval_cache['y'], sta_emb, 
+        train_ix, eval_ix, vocab_ix)
+
+
+        # if visualization:    
+        #     visualize_similarity(model, var, iter)
+        #     torch.save(model.cte.state_dict(), cte_cktp.format(iter))
+        #     torch.save(_train_cache, train_cache_cktp.format(iter))
 
             
 
@@ -329,22 +389,24 @@ def visualize_similarity(model, var, iter):
 
 
 if __name__ == "__main__":
-    gpt_ckpt = f"b_{block_size}" + "iters_{}.pth"
+    gpt_ckpt = f"b{block_size}_" + "iters_{}.pth".format(4000)
     # cte_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}.pth"
-    # train_cache_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}_train_cache.pth"
+    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache.pth"
 
 
 
     # train_gpt(gpt_ckpt)
+    # for iters in [0, 1000, 2000, 3000, 4000, 5000, 5999]:
+    #     eval_gpt(gpt_ckpt.format(iters))
     
-    # train_cte(os.path.join(gpt_path, gpt_ckpt),
-    #           os.path.join(cte_path, cte_ckpt),
-    #           os.path.join(train_cache_path, train_cache_ckpt))
+    # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
+    
+    train_cte(cache_ckpt, gpt_ckpt, 512, 8192)
     
     
-    validate_cte(
-        os.path.join(gpt_path, gpt_ckpt),
-        os.path.join(cte_path, cte_ckpt.format(0)),
-        os.path.join(train_cache_path, train_cache_ckpt.format(0))
-    )
+    # validate_cte(
+    #     os.path.join(gpt_path, gpt_ckpt),
+    #     os.path.join(cte_path, cte_ckpt.format(0)),
+    #     os.path.join(train_cache_path, train_cache_ckpt.format(0))
+    # )
                  

@@ -2,14 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python: GPT",
+      "name": "GPT-debug",
       "type": "debugpy",
       "request": "launch",
       "module": "src.gpt",
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [
-        "--block_size", "32"
       ],
       "env": {
         // "TRITON_CODEGEN_DEBUG": "1",

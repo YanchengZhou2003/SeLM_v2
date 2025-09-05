@@ -64,7 +64,7 @@ def compute_loss(
     eu_val: torch.Tensor,
     lth: torch.Tensor | float | int,
     mask: Optional[torch.Tensor] = None,
-    sum_dim: int = 2,
+    sum_dim: int = 1,
 ) -> torch.Tensor:
     """
     计算 loss：
@@ -76,21 +76,21 @@ def compute_loss(
         mask = torch.ones_like(ct_val)
 
     if kind == 'square':
-        loss = torch.square(ct_val - eu_val)          # (B, T1, T2, C, tp)
+        loss = torch.square(ct_val - eu_val)          # (T1, T2, C, tp)
         loss = loss * mask
-        loss = loss.sum(dim=sum_dim) / lth            # (B, T1, C, tp)
+        loss = loss.sum(dim=sum_dim) / lth            # (T1, C, tp)
         return loss
     
     if kind == 'lap':
-        loss = torch.square(ct_val - eu_val) * torch.abs(eu_val)          # (B, T1, T2, C, tp)
+        loss = torch.square(ct_val - eu_val) * torch.abs(eu_val)          # (T1, T2, C, tp)
         loss = loss * mask
-        loss = loss.sum(dim=sum_dim) / lth            # (B, T1, C, tp)
+        loss = loss.sum(dim=sum_dim) / lth            # (T1, C, tp)
         return loss        
 
     if kind == 'abs':
-        loss = torch.abs(ct_val - eu_val)             # (B, T1, T2, C, tp)
+        loss = torch.abs(ct_val - eu_val)             # (T1, T2, C, tp)
         loss = loss * mask
-        loss = loss.sum(dim=sum_dim) / lth            # (B, T1, C, tp)
+        loss = loss.sum(dim=sum_dim) / lth            # (T1, C, tp)
         return loss
 
     # 概率型：对类别维做 softmax，再计算散度
@@ -102,16 +102,16 @@ def compute_loss(
             log_ct, log_eu,
             log_target=True,
             reduction='none'
-        )                                             # (B, T1, T2, C, tp)
+        )                                             # (T1, T2, C, tp)
     elif kind == 'js':
         loss = js_div(                                # type: ignore[name-defined]
             log_ct, log_eu,
             log_target=True,
             reduction='none'
-        )                                             # (B, T1, T2, C, tp)
+        )                                             # (T1, T2, C, tp)
     else:
         raise ValueError(f'Unsupported loss kind: {kind}')
 
     loss = loss * mask
-    loss = loss.sum(dim=sum_dim)                      # (B, T1, C, tp)
+    loss = loss.sum(dim=sum_dim)                      # (T1, C, tp)
     return loss

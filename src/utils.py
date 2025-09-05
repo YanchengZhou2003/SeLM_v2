@@ -2,9 +2,11 @@ import functools
 import inspect
 import math
 import time
+from collections import abc
 from contextlib import ContextDecorator
 from typing import (Any, Callable, Dict, Iterable, List, Literal, Mapping,
-                    Optional, Sequence, Tuple, TypedDict, Union)
+                    MutableMapping, Optional, Sequence, Tuple, TypedDict,
+                    Union)
 
 import matplotlib
 import torch
@@ -1082,4 +1084,216 @@ def directed_label_smoothing(
     logits = logits - logits.mean(dim=-1, keepdim=True)
     if invalid.any():
         logits[invalid] = 0.0  # 对应均匀分布
-    return logitsz
+    return logits
+
+
+def pin_tensors_in_dict(d: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    仅遍历给定字典的第一层键值：
+    - 若值是位于 CPU 的 torch.Tensor，则替换为值.pin_memory()
+    - 其他类型保持不变
+    - 不做递归，不做设备迁移，不做任何附加处理
+    """
+    out = {}
+    for k, v in d.items():
+        if isinstance(v, torch.Tensor) and v.device.type == "cpu":
+            out[k] = v.pin_memory()
+        else:
+            out[k] = v
+    return out
+
+
+def make_splits(start: int, end: int, block_size: int) -> List[Tuple[int, int]]:
+    """
+    生成 [start, end) 区间内的切分，步长为 block_size。
+    最后一段不足 block_size 时以 end 结尾。
+    
+    例如：
+    make_splits(0, 10, 4) -> [(0, 4), (4, 8), (8, 10)]
+    make_splits(3, 11, 5) -> [(3, 8), (8, 11)]
+    """
+    if block_size <= 0:
+        raise ValueError("block_size 必须为正整数")
+    if end < start:
+        raise ValueError("end 必须 >= start")
+
+    splits: List[Tuple[int, int]] = []
+    cur = start
+    while cur < end:
+        nxt = cur + block_size
+        if nxt > end:
+            nxt = end
+        splits.append((cur, nxt))
+        cur = nxt
+    return splits
+
+
+def get_T1_type(T1_block: Tuple[int, int], N_train: int, N_valid: int, vocab_size: int) -> str:
+    """
+    根据 T1_block 的起止位置，判断其类型：
+      - 'train' : 完全在训练集范围内 [0, N_train)
+      - 'valid' : 完全在验证集范围内 [N_train, N_train + N_valid)
+      - 'cross' : 跨越训练集和验证集边界
+    """
+    start, end = T1_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T1_block {T1_block}")
+    if end <= N_train:
+        return 'train'
+    elif start >= N_train and end <= N_train + N_valid:
+        return 'valid'
+    elif start >= N_train + N_valid and end <= N_train + N_valid + vocab_size:
+        return 'vocab'
+    else:
+        raise ValueError(f"T1_block {T1_block} out of range for train+valid+vocab sizes {N_train+N_valid+vocab_size}")
+    
+    
+def get_T1_emb(T1_block: Tuple[int, int], t_eu_emb: torch.Tensor, v_eu_emb: torch.Tensor, vocab_emb: torch.Tensor, 
+               N_train: int, N_valid: int, vocab_size: int) -> torch.Tensor:
+    """
+    根据 T1_block 的起止位置，获取对应的嵌入表示。
+    """
+    start, end = T1_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T1_block {T1_block}")
+    if end <= N_train:
+        return t_eu_emb[start:end]
+    elif start >= N_train and end <= N_train + N_valid:
+        return v_eu_emb[start - N_train:end - N_train]
+    elif start >= N_train + N_valid and end <= N_train + N_valid + vocab_emb.size(0):
+        return vocab_emb[start - N_train - N_valid:end - N_train - N_valid]
+    else:
+        raise ValueError(f"T1_block {T1_block} out of range for train+valid+vocab sizes {N_train+N_valid+vocab_emb.size(0)}")
+    
+def get_T1_idx(T1_block: Tuple[int, int], t_idx: torch.Tensor, v_idx: torch.Tensor, vocab_idx: torch.Tensor, 
+               N_train: int, N_valid: int, vocab_size: int) -> torch.Tensor:
+    """
+    根据 T1_block 的起止位置，获取对应的索引。
+    """
+    start, end = T1_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T1_block {T1_block}")
+    if end <= N_train:
+        return t_idx[start:end]
+    elif start >= N_train and end <= N_train + N_valid:
+        return v_idx[start - N_train:end - N_train]
+    elif start >= N_train + N_valid and end <= N_train + N_valid + vocab_size:
+        return vocab_idx[start - N_train - N_valid:end - N_train - N_valid]
+    else:
+        raise ValueError(f"T1_block {T1_block} out of range for train+valid+vocab sizes {N_train+N_valid+vocab_size}")
+    
+def get_T1_targets(T1_block: Tuple[int, int], t_targets: torch.Tensor, 
+                   N_train: int, N_valid: int, vocab_size: int) -> torch.Tensor:
+    """
+    根据 T1_block 的起止位置，获取对应的目标标签。
+    """
+    start, end = T1_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T1_block {T1_block}")
+    if end <= N_train:
+        return t_targets[start:end]
+    else:
+        return torch.zeros((end - start,), dtype=torch.long, device='cpu', pin_memory=True) - 1
+    
+    
+def get_T2_type(T2_block: Tuple[int, int], N_train: int, vocab_size: int) -> str:
+    """
+    根据 T2_block 的起止位置，判断其类型：
+      - 'train' : 完全在训练集范围内 [0, N_train)
+      - 'vocab' : 完全在词表范围内 [N_train, N_train + vocab_size)
+      - 'cross' : 跨越训练集和词表边界
+    """
+    start, end = T2_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T2_block {T2_block}")
+    if end <= N_train:
+        return 'train'
+    elif start >= N_train and end <= N_train + vocab_size:
+        return 'vocab'
+    else:
+        raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_size}")
+
+def get_T2_emb(T2_block: Tuple[int, int], t_eu_emb: torch.Tensor, vocab_emb: torch.Tensor, 
+               N_train: int, vocab_size: int) -> torch.Tensor:
+    """
+    根据 T2_block 的起止位置，获取对应的嵌入表示。
+    """
+    start, end = T2_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T2_block {T2_block}")
+    if end <= N_train:
+        return t_eu_emb[start:end]
+    elif start >= N_train and end <= N_train + vocab_emb.size(0):
+        return vocab_emb[start - N_train:end - N_train]
+    else:
+        raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_emb.size(0)}")
+    
+def get_T2_idx(T2_block: Tuple[int, int], t_idx: torch.Tensor, vocab_idx: torch.Tensor, 
+               N_train: int, vocab_size: int) -> torch.Tensor:
+    """
+    根据 T2_block 的起止位置，获取对应的索引。
+    """
+    start, end = T2_block
+    if start < 0 or end <= start:
+        raise ValueError(f"Invalid T2_block {T2_block}")
+    if end <= N_train:
+        return t_idx[start:end]
+    elif start >= N_train and end <= N_train + vocab_size:
+        return vocab_idx[start - N_train:end - N_train]
+    else:
+        raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_size}")
+    
+def get_loss_type(T1_type: str, T2_type: str, loss_strategy: Dict) -> str:
+    """
+    根据 T1 和 T2 的类型，确定损失计算的类型：
+      - 'tt' : T1 和 T2 都是训练集
+      - 'tv' : T1 是训练集，T2 是词表
+      - 'vt' : T1 是验证集，T2 是训练集
+      - 'vv' : T1 是验证集，T2 是词表
+      - 'vocab' : T1 是词表，T2 是词表
+      - 'other' : 其他组合，不计算损失
+    """
+    if T1_type == 'train' and T2_type == 'train':
+        return loss_strategy['dyn_loss']
+    elif T1_type == 'train' and T2_type == 'vocab':
+        return loss_strategy['prob_loss']
+    elif T1_type == 'valid' and T2_type == 'train':
+        return loss_strategy['dyn_loss']
+    elif T1_type == 'valid' and T2_type == 'vocab':
+        raise ValueError("Invalid combination: T1 is 'valid' and T2 is 'vocab'")
+    elif T1_type == 'vocab' and T2_type == 'vocab':
+        return loss_strategy['sta_loss']
+    else:
+        raise ValueError(f"Invalid combination of T1_type '{T1_type}' and T2_type '{T2_type}'")
+
+
+def normalized_matmul(A: torch.Tensor, B: torch.Tensor, 
+                      ori_prod: bool = False,
+                      eps: float = 1e-12) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    输入:
+        A, B: 形状相同的张量，且其最后两维满足矩阵乘法要求：
+              A[..., m, k] 与 B[..., k, n]
+        eps: 归一化时防止除零的微小常数
+    流程:
+        1) 对 dim = -1 / -2 做 L2 归一化 (keepdim=True)
+        2) 进行矩阵乘法
+        3) 返回 (乘积, A 的范数, B 的范数)，范数为最后一维的 L2 范数 (keepdim=True)
+    返回:
+        prod: torch.Tensor，矩阵乘积，形状为 A[..., m, k] @ B[..., k, n] -> [..., m, n]
+        normA: torch.Tensor，A 在最后一维的 L2 范数，形状为 [..., m, 1]
+        normB: torch.Tensor，B 在最后一维的 L2 范数，形状为 [..., 1, n]
+    """
+    # 计算最后一维的 L2 范数，保留维度
+    normA = torch.norm(A, p=2, dim=-1, keepdim=True).clamp_min(eps)
+    normB = torch.norm(B, p=2, dim=-2, keepdim=True).clamp_min(eps)
+
+    # 归一化到单位范数
+    A_normed = A / normA
+    B_normed = B / normB
+
+    # 矩阵乘法（针对最后两维），其余维度按批对齐
+    prod = A_normed @ B_normed if not ori_prod else A @ B
+    norm = normA * normB
+
+    return prod, norm
