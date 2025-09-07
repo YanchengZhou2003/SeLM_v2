@@ -1,20 +1,24 @@
 import argparse
 import os
+from typing import Dict, Optional
 
 import torch
 
-from typing import Dict, Optional
-
 from src.utils import LossTypeDict
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
-parser.add_argument("--cte_train_bs", type=int, default=1, help="CTE training batch size")
-parser.add_argument("--cte_train_iters", type=int, default=1, help="CTE training iterations")
-parser.add_argument("--cte_eval_bs", type=int, default=32, help="CTE evaluation batch size")
-parser.add_argument("--cte_eval_iters", type=int, default=1, help="CTE evaluation iterations")
+parser.add_argument("--cte_train_bs"   , type=int,   default=1,    help="CTE training batch size")
+parser.add_argument("--cte_train_iters", type=int,   default=1,    help="CTE training iterations")
+parser.add_argument("--cte_eval_bs"    , type=int,   default=32,   help="CTE evaluation batch size")
+parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE evaluation iterations")
+parser.add_argument("--ratio_dyn_prob" , type=float, default=0.95, help="Ratio for dynamic and probability loss") 
+# 256: 0.962, 512: 0.9651
+parser.add_argument("--ratio_dyn_sta"  , type=float, default=0.6,  help="Ratio for dynamic and static loss")
+parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
+parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
 args = parser.parse_args()
 
 # hyperparameters
@@ -50,20 +54,21 @@ cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 =
 cte_save_interval = 1
 
 T1_block_size     = 1024
-T2_block_size     = 8192
+T2_block_size     = 1024
 
-
+train_length      = args.train_length  # 512
 
 loss_strategy: Dict = {
     'dyn_loss'  : 'square', # dyn:  dynamic
     'sta_loss'  : 'square', # sta:  static
     'prob_loss' : 'js' ,    # prob: probability
-    'target'  : 'weighted_dyn_prob',
-    'converge': 80,
-    'ratio_dyn' : 0.9950,
-    'ratio_prob': 0.0050  
+    'weighted_dyn_prob': True,
+    'weighted_dyn_sta' : True,
+    'converge': 50,
+    'ratio_dyn_prob' : args.ratio_dyn_prob,  
+    'ratio_dyn_sta'  : args.ratio_dyn_sta    
 }
-epoch_num=150
+epoch_num=100
 
 
 
@@ -109,7 +114,59 @@ sample_k = 1
 
 # ------------
 
-torch.manual_seed(1337)
+def set_seed(seed: int = 42, deterministic: bool = True, benchmark: bool = False) -> None:
+    """
+    统一设置 random、numpy、torch 的随机种子。
+    
+    Args:
+        seed (int): 随机种子数值。
+        deterministic (bool): 是否开启 PyTorch 确定性模式（可能略降速度）。
+        benchmark (bool): 是否开启 cuDNN benchmark（会带来非确定性，通常与 deterministic=False 搭配）。
+    """
+    import os
+    import random
+
+    import numpy as np
+
+    # 1) Python 和 NumPy
+    random.seed(seed)
+    np.random.seed(seed)
+
+    # 2) 环境变量（影响某些哈希/多进程行为）
+    os.environ["PYTHONHASHSEED"] = str(seed)
+
+    try:
+        import torch
+
+        torch.manual_seed(seed)
+        # CUDA（若可用）
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)  # 多 GPU
+
+        # cuDNN / 后端设置
+        ## torch.backends.cudnn.deterministic = deterministic
+        torch.backends.cudnn.benchmark = benchmark
+
+        # 新版 PyTorch 的确定性设置（如可用）
+        # if hasattr(torch, "use_deterministic_algorithms"):
+        #     torch.use_deterministic_algorithms(deterministic, warn_only=True)
+
+        # Apple MPS（如可用）
+        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+            # 目前 MPS 不完全可复现，但仍设置 manual_seed
+            pass
+
+        # DataLoader 的 worker 复现性（提示用法）
+        # 在 DataLoader 中使用：
+        # generator = torch.Generator()
+        # generator.manual_seed(seed)
+        # DataLoader(..., generator=generator, worker_init_fn=lambda w_id: np.random.seed(seed + w_id))
+    except ImportError:
+        # 未安装 torch 时忽略
+        pass
+
+set_seed(42, deterministic=True, benchmark=False)
 
 # wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 with open('./data/input.txt', 'r', encoding='utf-8') as f:
@@ -127,5 +184,5 @@ gpt_path = './ckpt/gpt'
 cte_path = './ckpt/cte'
 cache_path = './data/'
 train_cache_path = './ckpt/cte'
-sim_eu_path = './vis/' + f'b_{block_size}' + 'sim_eu_i{}.png'
-sim_ct_path = './vis/' + f'b_{block_size}' + 'sim_ct_i{}.png'
+vis_path = f'./vis/b_{train_length}'
+os.makedirs(vis_path, exist_ok=True)

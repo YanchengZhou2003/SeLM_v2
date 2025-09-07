@@ -1263,6 +1263,8 @@ def get_loss_type(T1_type: str, T2_type: str, loss_strategy: Dict) -> str:
         raise ValueError("Invalid combination: T1 is 'valid' and T2 is 'vocab'")
     elif T1_type == 'vocab' and T2_type == 'vocab':
         return loss_strategy['sta_loss']
+    elif T1_type == 'vocab' and T2_type == 'train':
+        return loss_strategy['dyn_loss']
     else:
         raise ValueError(f"Invalid combination of T1_type '{T1_type}' and T2_type '{T2_type}'")
 
@@ -1281,8 +1283,7 @@ def normalized_matmul(A: torch.Tensor, B: torch.Tensor,
         3) 返回 (乘积, A 的范数, B 的范数)，范数为最后一维的 L2 范数 (keepdim=True)
     返回:
         prod: torch.Tensor，矩阵乘积，形状为 A[..., m, k] @ B[..., k, n] -> [..., m, n]
-        normA: torch.Tensor，A 在最后一维的 L2 范数，形状为 [..., m, 1]
-        normB: torch.Tensor，B 在最后一维的 L2 范数，形状为 [..., 1, n]
+        norm: torch.Tensor，形状为 A[..., m, 1] * B[..., 1, n]
     """
     # 计算最后一维的 L2 范数，保留维度
     normA = torch.norm(A, p=2, dim=-1, keepdim=True).clamp_min(eps)
@@ -1297,3 +1298,34 @@ def normalized_matmul(A: torch.Tensor, B: torch.Tensor,
     norm = normA * normB
 
     return prod, norm
+
+
+def mask_fill_scalar_expand(mask: torch.Tensor,
+                            true_value,
+                            false_value,
+                            dim: int,
+                            all_true=False) -> torch.Tensor:
+    """
+    Args:
+        mask: Bool tensor of shape (N,)
+        true_value: scalar (number or 0-dim tensor)
+        false_value: scalar (number or 0-dim tensor)
+        dim: total number of dims for the output (>=1)
+
+    Returns:
+        Tensor of shape (N, 1, 1, ..., 1) with total dims == dim.
+    """
+    assert mask.dtype == torch.bool and mask.dim() == 1, "mask must be (N,) bool"
+    assert dim >= 1, "dim must be >= 1"
+
+    N = mask.shape[0]
+    out_shape = (N,) + (1,) * (dim - 1)
+    # Create base tensor filled with false_value
+    out = torch.full(out_shape, true_value, dtype=None, device=mask.device)
+    if all_true:
+        return out
+    
+    # Expand mask to target shape for where()
+    mask_expanded = mask.view(N, *([1] * (dim - 1)))
+    out = torch.where(mask_expanded, out, torch.as_tensor(false_value, device=mask.device))
+    return out

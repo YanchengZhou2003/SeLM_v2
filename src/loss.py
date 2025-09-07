@@ -62,7 +62,6 @@ def compute_loss(
     kind: str,
     ct_val: torch.Tensor,
     eu_val: torch.Tensor,
-    lth: torch.Tensor | float | int,
     mask: Optional[torch.Tensor] = None,
     sum_dim: int = 1,
 ) -> torch.Tensor:
@@ -78,19 +77,19 @@ def compute_loss(
     if kind == 'square':
         loss = torch.square(ct_val - eu_val)          # (T1, T2, C, tp)
         loss = loss * mask
-        loss = loss.sum(dim=sum_dim) / lth            # (T1, C, tp)
+        loss = loss.sum(dim=sum_dim)                  # (T1, C, tp)
         return loss
     
     if kind == 'lap':
         loss = torch.square(ct_val - eu_val) * torch.abs(eu_val)          # (T1, T2, C, tp)
         loss = loss * mask
-        loss = loss.sum(dim=sum_dim) / lth            # (T1, C, tp)
+        loss = loss.sum(dim=sum_dim)                  # (T1, C, tp)
         return loss        
 
     if kind == 'abs':
         loss = torch.abs(ct_val - eu_val)             # (T1, T2, C, tp)
         loss = loss * mask
-        loss = loss.sum(dim=sum_dim) / lth            # (T1, C, tp)
+        loss = loss.sum(dim=sum_dim)                  # (T1, C, tp)
         return loss
 
     # 概率型：对类别维做 softmax，再计算散度
@@ -115,3 +114,17 @@ def compute_loss(
     loss = loss * mask
     loss = loss.sum(dim=sum_dim)                      # (T1, C, tp)
     return loss
+
+def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1,)):
+    # logits: [B, C] 或 [*, C]; targets: [B] 或 [*]
+    assert logits.shape[:-1] == targets.shape
+    maxk = max(ks)
+    topk_idx = logits.topk(maxk, dim=-1).indices            # [..., maxk]
+    t = targets.unsqueeze(-1).expand_as(topk_idx)           # [..., maxk]
+    correct = (topk_idx == t)                               # [..., maxk]
+    res = {}
+    for k in ks:
+        hits = correct[..., :k].any(dim=-1).float().sum().item()
+        total = targets.numel()
+        res[k] = hits / total
+    return res

@@ -259,6 +259,12 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     eval_cache = load_file(os.path.join(cache_path, cache_cktp.format(val_length, 'val')), device='cpu')
     train_cache, eval_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(eval_cache)
     
+    ''' debug '''
+    if args.truncate_valid > 0:
+        eval_cache['emb'] = eval_cache['emb'][:args.truncate_valid]
+        eval_cache['y'] = eval_cache['y'][:args.truncate_valid]
+        val_length = eval_cache['emb'].shape[0]
+    
     ### step 2: 初始化 GPT 和 CTE
     emb_size = train_length + val_length + vocab_size
     cte = CritiGraph(h, tp, c, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
@@ -278,7 +284,14 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     train_loss_eu = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
     eval_logits_eu = eval_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
     eval_loss_eu = F.cross_entropy(eval_logits_eu.view(-1, eval_logits_eu.size(-1)), eval_cache['y'], reduction='mean')
+    
+    train_pred = train_logits_eu.argmax(dim=-1)            # (train_length,)
+    train_acc = (train_pred == train_cache['y']).float().mean().item()
+    eval_pred = eval_logits_eu.argmax(dim=-1)              # (eval_length,)
+    eval_acc = (eval_pred == eval_cache['y']).float().mean().item()
+    
     print(f"Before CTE Training: train eu loss: {train_loss_eu.item()}, eval eu loss: {eval_loss_eu.item()}")
+    print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {eval_acc}")
     
     #### step 4.2: CTE 训练与测试
     cte(train_cache['emb'], train_cache['y'], eval_cache['emb'], eval_cache['y'], sta_emb, 
@@ -290,101 +303,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
         #     torch.save(model.cte.state_dict(), cte_cktp.format(iter))
         #     torch.save(_train_cache, train_cache_cktp.format(iter))
 
-            
-
-
-def visualize_similarity(model, var, iter):
-    emb_eu = var['emb_normed'][0]
-    emb_ct = model.cte.main_locations[var['idi'][0].cpu()]
-    print(emb_eu.shape)
-    
-    # --- 相似度矩阵 (eu) ---
-    S = torch.matmul(emb_eu, emb_eu.T).cpu().numpy()
-    np.fill_diagonal(S, 1.0)
-
-    # 转为“距离”做聚类
-    D = 1.0 - S
-    np.fill_diagonal(D, 0.0)
-    dvec = squareform(D, checks=False)
-
-    Z = linkage(dvec, method='average')
-    order = leaves_list(Z)
-    S_re = S[order][:, order]
-
-    # --- 一张图：左树 + 热图 + 右色条 (eu) ---
-    fig = plt.figure(figsize=(18, 14))
-    gs = fig.add_gridspec(
-        1, 3,
-        width_ratios=[2.5, 14, 0.5],
-        height_ratios=[1.0],
-        wspace=0.0, hspace=0.0
-    )
-
-    # 左侧行树
-    ax_row = fig.add_subplot(gs[0, 0])
-    dendrogram(Z, ax=ax_row, orientation="right", no_labels=True, color_threshold=None)
-    ax_row.invert_yaxis()
-    ax_row.set_xticks([]); ax_row.set_yticks([])
-
-    # 中间热图 (eu)
-    ax = fig.add_subplot(gs[0, 1])
-    vmin, vmax = S_re.min(), S_re.max()
-    norm = PowerNorm(gamma=2.0, vmin=vmin, vmax=vmax)
-    im = ax.imshow(S_re, cmap="inferno", norm=norm,
-                   interpolation="nearest", aspect="equal")
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title("Hierarchical Cosine Similarity (eu)")
-
-    # 右侧颜色条
-    cax = fig.add_subplot(gs[0, 2])
-    cb = fig.colorbar(im, cax=cax)
-    cb.set_label("eu-cosine similarity", rotation=270, labelpad=25)
-
-    fig.savefig(sim_eu_path.format(iter), dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Similarity + tree visualization saved to {sim_eu_path.format(iter)}")
-
-    # --- 相似度矩阵 (ct) ---
-    distance_ct = model.cte.main_distance(
-        emb_ct.unsqueeze(1), emb_ct.unsqueeze(0),
-        torch.ones((block_size + vocab_size, block_size + vocab_size, 1))
-    ).mean(dim=-1).cpu().numpy()
-    np.fill_diagonal(distance_ct, 1.0)
-    S_ct = distance_ct[order][:, order]
-
-    # --- 一张图：左树 + 热图 + 右色条 (ct) ---
-    fig = plt.figure(figsize=(18, 14))
-    gs = fig.add_gridspec(
-        1, 3,
-        width_ratios=[2.5, 14, 0.5],
-        height_ratios=[1.0],
-        wspace=0.0, hspace=0.0
-    )
-
-    # 左侧行树 (沿用同一个 Z 顺序)
-    ax_row = fig.add_subplot(gs[0, 0])
-    dendrogram(Z, ax=ax_row, orientation="right", no_labels=True, color_threshold=None)
-    ax_row.invert_yaxis()
-    ax_row.set_xticks([]); ax_row.set_yticks([])
-
-    # 中间热图 (ct)
-    ax = fig.add_subplot(gs[0, 1])
-    vmin, vmax = S_ct.min(), S_ct.max()
-    norm = PowerNorm(gamma=2.0, vmin=vmin, vmax=vmax)
-    im = ax.imshow(S_ct, cmap="inferno", norm=norm,
-                   interpolation="nearest", aspect="equal")
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title("Hierarchical Cosine Similarity (ct)")
-
-    # 右侧颜色条
-    cax = fig.add_subplot(gs[0, 2])
-    cb = fig.colorbar(im, cax=cax)
-    cb.set_label("ct-cosine similarity", rotation=270, labelpad=25)
-
-    fig.savefig(sim_ct_path.format(iter), dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print(f"Similarity + tree visualization saved to {sim_ct_path.format(iter)}")
-
+        
 
 
 
@@ -401,7 +320,7 @@ if __name__ == "__main__":
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
-    train_cte(cache_ckpt, gpt_ckpt, 512, 8192)
+    train_cte(cache_ckpt, gpt_ckpt, train_length, 8192)
     
     
     # validate_cte(
