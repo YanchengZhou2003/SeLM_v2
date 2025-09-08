@@ -6,9 +6,8 @@ import torch
 import triton
 import triton.language as tl
 
-from src.para import (batch_size, block_size, c,
-                                        division_fact, h, tp,
-                                        vocab_size)
+from src.para import (batch_size, block_size, division_fact, factor, h, tp,
+                      vocab_size)
 
 # @triton.jit
 # def _get_distance_kernel(coord1, coord2, lut_ptr):
@@ -246,7 +245,7 @@ def triton_loom_wrapper(
         msk_sb, msk_st, msk_st2,
         sel_sb, sel_st, sel_sd,
         BLOCK_T2=64, BLOCK_C=32, BLOCK_D=2,
-        T=block_size+vocab_size, C=2*h*int(c*h//division_fact)+1, D=tp, TP=tp, H=h,
+        T=block_size+vocab_size, C=2*h*int(factor*h//division_fact)+1, D=tp, TP=tp, H=h,
         loss_calc=1,
         num_warps=8, num_stages=4,
         

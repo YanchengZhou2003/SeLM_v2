@@ -26,6 +26,8 @@ _cache = {}
 
 from typing import Literal, Mapping, TypedDict, Union
 
+from src.sample import BaseSample
+
 
 # 仅目标 + 收敛
 class PhaseConfigBase(TypedDict):
@@ -1196,13 +1198,15 @@ def get_T1_targets(T1_block: Tuple[int, int], t_targets: torch.Tensor,
         return torch.zeros((end - start,), dtype=torch.long, device='cpu', pin_memory=True) - 1
     
     
-def get_T2_type(T2_block: Tuple[int, int], N_train: int, vocab_size: int) -> str:
+def get_T2_type(T2_block: Union[Tuple[int, int], BaseSample], N_train: int, vocab_size: int) -> str:
     """
     根据 T2_block 的起止位置，判断其类型：
       - 'train' : 完全在训练集范围内 [0, N_train)
       - 'vocab' : 完全在词表范围内 [N_train, N_train + vocab_size)
-      - 'cross' : 跨越训练集和词表边界
     """
+    if isinstance(T2_block, BaseSample):
+        # 如果是 _Sample 类型，直接返回 'cross'
+        return 'train'
     start, end = T2_block
     if start < 0 or end <= start:
         raise ValueError(f"Invalid T2_block {T2_block}")
@@ -1213,11 +1217,15 @@ def get_T2_type(T2_block: Tuple[int, int], N_train: int, vocab_size: int) -> str
     else:
         raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_size}")
 
-def get_T2_emb(T2_block: Tuple[int, int], t_eu_emb: torch.Tensor, vocab_emb: torch.Tensor, 
+def get_T2_emb(T1_block: Tuple[int, int], T2_block: Union[Tuple[int, int], BaseSample], t_eu_emb: torch.Tensor, vocab_emb: torch.Tensor, 
                N_train: int, vocab_size: int) -> torch.Tensor:
     """
     根据 T2_block 的起止位置，获取对应的嵌入表示。
     """
+    if isinstance(T2_block, BaseSample):
+        return t_eu_emb[T2_block[T1_block]] # T2_block[T1_block] 会得到一个 (T1_block_size, c) 的张量，那么，返回张量的大小为 (T1_block_size, c, dim)
+        
+    
     start, end = T2_block
     if start < 0 or end <= start:
         raise ValueError(f"Invalid T2_block {T2_block}")
@@ -1228,11 +1236,13 @@ def get_T2_emb(T2_block: Tuple[int, int], t_eu_emb: torch.Tensor, vocab_emb: tor
     else:
         raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_emb.size(0)}")
     
-def get_T2_idx(T2_block: Tuple[int, int], t_idx: torch.Tensor, vocab_idx: torch.Tensor, 
+def get_T2_idx(T1_block: Tuple[int, int], T2_block: Union[Tuple[int, int], BaseSample], t_idx: torch.Tensor, vocab_idx: torch.Tensor, 
                N_train: int, vocab_size: int) -> torch.Tensor:
     """
     根据 T2_block 的起止位置，获取对应的索引。
     """
+    if isinstance(T2_block, BaseSample):
+        return t_idx[T2_block[T1_block]] # T2_block[T1_block] 会得到一个 (T1_block_size, c) 的张量，那么，返回张量的大小为 (T1_block_size, c)
     start, end = T2_block
     if start < 0 or end <= start:
         raise ValueError(f"Invalid T2_block {T2_block}")
@@ -1260,7 +1270,7 @@ def get_loss_type(T1_type: str, T2_type: str, loss_strategy: Dict) -> str:
     elif T1_type == 'valid' and T2_type == 'train':
         return loss_strategy['dyn_loss']
     elif T1_type == 'valid' and T2_type == 'vocab':
-        raise ValueError("Invalid combination: T1 is 'valid' and T2 is 'vocab'")
+        return loss_strategy['prob_loss']
     elif T1_type == 'vocab' and T2_type == 'vocab':
         return loss_strategy['sta_loss']
     elif T1_type == 'vocab' and T2_type == 'train':

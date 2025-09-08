@@ -161,7 +161,7 @@ class GPTLanguageModel(nn.Module):
             return x
         
         token_embeddings = self.token_embedding_table.weight  # (V, E)
-        logits_eu = torch.matmul(x, token_embeddings.t()) # (B, T, V)
+        logits_eu = 20. * torch.matmul(F.normalize(x, dim=-1), F.normalize(token_embeddings, dim=-1).t()) # (B, T, V)
         loss_eu = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T))
         
         return loss_eu
@@ -248,7 +248,7 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     
     print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
     save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
-    # save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
+    save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
 
 ################ ------------- 训练 CTE ------------- ################
 
@@ -267,7 +267,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     
     ### step 2: 初始化 GPT 和 CTE
     emb_size = train_length + val_length + vocab_size
-    cte = CritiGraph(h, tp, c, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
+    cte = CritiGraph(h, tp, factor, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
     cte.eval()
     
     gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
@@ -295,7 +295,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     
     #### step 4.2: CTE 训练与测试
     cte(train_cache['emb'], train_cache['y'], eval_cache['emb'], eval_cache['y'], sta_emb, 
-        train_ix, eval_ix, vocab_ix)
+        train_ix, eval_ix, vocab_ix, sample_factor=sample_factor)
 
 
         # if visualization:    
@@ -308,14 +308,14 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
 
 
 if __name__ == "__main__":
-    gpt_ckpt = f"b{block_size}_" + "iters_{}.pth".format(4000)
+    gpt_ckpt = f"normed_b{block_size}_" + "iters_{}.pth".format(3000)
     # cte_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}.pth"
     cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache.pth"
 
 
 
     # train_gpt(gpt_ckpt)
-    # for iters in [0, 1000, 2000, 3000, 4000, 5000, 5999]:
+    # for iters in [0, 1000, 2000, 3000, 4000]:
     #     eval_gpt(gpt_ckpt.format(iters))
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)

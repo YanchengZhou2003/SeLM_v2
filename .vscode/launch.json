@@ -9,6 +9,10 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [
+        "--train_length", "4096",
+        "--ratio_dyn_prob", "1.00",
+        "--truncate_valid", "256",
+        "--sample_factor", "0.4",
       ],
       "env": {
         // "TRITON_CODEGEN_DEBUG": "1",

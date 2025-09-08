@@ -10,9 +10,11 @@ from matplotlib.colors import PowerNorm
 from torch.nn import functional as F
 from tqdm import tqdm
 
+from src.gettime import gettime, mark
 from src.loom_kernel import triton_loom_wrapper
 from src.loss import compute_loss
-from src.para import T1_block_size, T2_block_size
+from src.para import ED, ST, T1_block_size, T2_block_size
+from src.sample import BaseSample, CTE_Sample, CTE_Sort_Sample, Expander_Sample
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
 
@@ -27,7 +29,7 @@ class CritiGraph(torch.nn.Module):
     main_distance_lookup_table: torch.Tensor
     main_locations: torch.Tensor
     
-    def __init__(self, h, tp, c, emb_size, division_fact, 
+    def __init__(self, h, tp, f, emb_size, division_fact, 
                  loss_strategy, sample_k, epoch_num):
         super().__init__() 
         ### 1：设备信息
@@ -38,8 +40,8 @@ class CritiGraph(torch.nn.Module):
         self.h = h
         self.tp = tp
         self.n = int(2**h)
-        self.c = c
-        self.k = int(c*h // division_fact)
+        self.c = f
+        self.k = int(f*h // division_fact)
         self.loss_strategy = loss_strategy
         self.emb_size = emb_size
         self.epoch_num = epoch_num
@@ -189,11 +191,17 @@ class CritiGraph(torch.nn.Module):
     
     @torch.no_grad()
     def loom(self, 
-             T1_block: Tuple[int, int], T2_block: Tuple[int, int],
-             pos: torch.Tensor, emb: torch.Tensor,
+             T1_block: Tuple[int, int], T2_block: Union[Tuple[int, int], BaseSample],
+             pos: torch.Tensor, # (T2, )    or (T1, T2, )
+             emb: torch.Tensor, # (T2, dim) or (T1, T2, dim)
              loss_type: str,
              _all_loss: torch.Tensor
     ):
+        sample_flag = False
+        if isinstance(T2_block, BaseSample):
+            T2_block = T2_block.get_size()
+            sample_flag = True        
+            
         ### step 1: 获取基本信息
         T1 = T1_block[1] - T1_block[0]
         cT2 = T2_block[1] - T2_block[0]
@@ -219,25 +227,38 @@ class CritiGraph(torch.nn.Module):
                 ### 通信1：数据传输开始 ###        
                 pos_T2, emb_T2 = to_dev(
                     pos, emb, 
-                    device=dev, s=s, e=e
+                    device=dev, s=s, e=e,
+                    dim = 1 if sample_flag else 0
                 )
                 ### 通信1：数据传输结束 ###
                  
                 
                 ### 计算：计算开始 ###
                 #### step 3.0: 计算欧式空间的值
-                emb_T1 = self.emb_T1[i] # (T1, dim)                
-                val_v, val_n = normalized_matmul(emb_T1, emb_T2.t(), ori_prod=(loss_type == 'kl' or loss_type == 'js')) # (T1, T2) 
+                emb_T1 = self.emb_T1[i] # (T1, dim)   
+                if sample_flag:
+                    val_v, val_n = normalized_matmul(emb_T1[:, None, :], emb_T2.transpose(1, 2), ori_prod=(loss_type == 'kl' or loss_type == 'js')) 
+                    val_v, val_n = val_v.squeeze(1), val_n.squeeze(1)
+                    # (T1, 1, T2) @ (T1, dim, T2) -> (T1, 1, T2) -> (T1, T2) 
+                else:             
+                    val_v, val_n = normalized_matmul(emb_T1, emb_T2.t(), ori_prod=(loss_type == 'kl' or loss_type == 'js')) # (T1, T2) 
+                    
                 if loss_type == 'kl' or loss_type == 'js':
                     val_v = self.targets_T1[i][:, s:e].to(torch.float32) # (T1, T2)
+                    val_n = 20 * torch.ones_like(val_n) # (T1, T2)
                 else:
                     val_n = torch.ones_like(val_n) # (T1, T2)
                 
+                # (T1, dim) -> (T1, 1, dim) @ (T1, dim, T2) -> (T1, 1, T2) -> (T1, T2)
+                
                 #### step 3.1: 获取基本信息
-                sta_loc = self.sta_loc_T1[i] # (T1, tp)
-                pos_loc = self.locations[i][pos_T2] # (T2, tp)
+                sta_loc = self.sta_loc_T1[i]        # (T1, tp)
+                pos_loc = self.locations[i][pos_T2] # (T2, tp) or (T1, T2, tp)
+                if not sample_flag:
+                    pos_loc = pos_loc.unsqueeze(0).expand(T1, -1, -1) # (T1, T2, tp) 
+                
                 dis_sta_pos     = self.distance(
-                    sta_loc[:, None, :]   , pos_loc[None, :, :]     , val_n[..., None]      
+                    sta_loc[:, None, :]   , pos_loc[:, :, :]     , val_n[..., None]      
                 )               # (T1, T2, tp)
                 
                 #### step 2: 获取候选位置（的值）
@@ -245,7 +266,7 @@ class CritiGraph(torch.nn.Module):
                 dis_sta_pos_sum = dis_sta_pos.sum(dim=-1) 
                              # (T1, T2)
                 dis_cnc_pos     = self.distance(
-                    cnc_loc[:, None, :, :], pos_loc[None, :, None,:], val_n[..., None, None]
+                    cnc_loc[:, None, :, :], pos_loc[:, :, None,:], val_n[..., None, None]
                 )            # (T1, T2, C, tp)
                 ct_val          = (
                     dis_sta_pos_sum[:, :, None, None] - dis_sta_pos[:, :, None, :] + dis_cnc_pos
@@ -270,19 +291,21 @@ class CritiGraph(torch.nn.Module):
         return _all_loss.sum(dim=0) # (T1, C, tp)
 
 
-    @timeit(name=f'cte 函数主体')
+    @gettime(fmt='ms', pr=False)
     def forward(self,        
-                t_eu_emb  : torch.Tensor, # (N_train, dim), pinned memory
-                t_targets : torch.Tensor, # (N_train, )   , pinned memory
-                v_eu_emb  : torch.Tensor, # (N_valid, dim), pinned memory
-                v_targets : torch.Tensor, # (N_valid, )   , pinned memory
+                t_eu_emb  : torch.Tensor, # (N_train, dim),    pinned memory
+                t_targets : torch.Tensor, # (N_train, )   ,    pinned memory
+                v_eu_emb  : torch.Tensor, # (N_valid, dim),    pinned memory
+                v_targets : torch.Tensor, # (N_valid, )   ,    pinned memory
                 vocab_emb : torch.Tensor, # (vocab_size, dim), pinned memory
-                t_idx     : torch.Tensor, # (N_train, )   , pinned memory
-                v_idx     : torch.Tensor, # (N_valid, )   , pinned memory
-                vocab_idx : torch.Tensor, # (vocab_size, ), pinned memory
-                mark      : Optional[Mark] = None,
+                t_idx     : torch.Tensor, # (N_train, )   ,    pinned memory
+                v_idx     : torch.Tensor, # (N_valid, )   ,    pinned memory
+                vocab_idx : torch.Tensor, # (vocab_size, ),    pinned memory
+                sample_factor: float = 1.,
                 ### 以上张量全部放在 cpu，避免占用 gpu 内存
         ): 
+        mark(ST, "total")
+        mark(ST, "preparation")
         ### step 1: 获取基本信息
         N_train, N_valid, vocab_size = t_eu_emb.size(0), v_eu_emb.size(0), vocab_idx.size(0)
         # 在这里，我们需要拟合的是一个 (N_train + N_valid, N_train + vocab_size) 的矩阵
@@ -293,16 +316,24 @@ class CritiGraph(torch.nn.Module):
         vocab_T1_splits = [(N_train + N_valid, N_train + N_valid + vocab_size)] 
         T1_splits       = t_T1_splits + v_T1_splits + vocab_T1_splits
         
-        t_T2_splits     = make_splits(0, N_train, T2_block_size)
+        t_T2_splits4t   = make_splits(0, N_train, T2_block_size)
+        t_T2_splits4t   = Expander_Sample(N_train, int(int(math.log2(N_train)) ** 2 * sample_factor))
+        # t_T2_splits4t   = CTE_Sort_Sample(int(int(math.log2(N_train)) ** 2 * sample_factor))
+        t_T2_splits4t.generate_connection()
+        for T1_block in T1_splits:
+            t_T2_splits4t[T1_block] = t_T2_splits4t.get_connection(t_idx[T1_block[0]:T1_block[1]])
+        t_T2_splits4v   = make_splits(0, N_train, T2_block_size)
         vocab_T2_splits = [(N_train, N_train + vocab_size)]
-        T2_splits       = t_T2_splits + vocab_T2_splits
         
         ### step 2: 准备训练时常量
-        neighbor_idx = {"train": (0, N_train + vocab_size), "valid": (0, N_train), "vocab": (N_train, N_train + vocab_size)}
-        # (num_dev, T1_block_size, C, tp)
-        
+        neighbor_idx = {"train": (0, t_T2_splits4t.c if isinstance(t_T2_splits4t, BaseSample) else N_train + vocab_size), "valid": (0, N_train), "vocab": (N_train, N_train + vocab_size)}
+
+        mark(ED, "preparation", father="total")
         ### step 3: 遍历所有 epoch
+        mark(ST, "all_epoch")
         for epoch in range(self.epoch_num):
+            mark(ST, "per_epoch")
+            mark(ST, "epoch_preparation")
             self.epoch = epoch
             self.converge = self.loss_strategy['converge'] is not None and (self.epoch  >= self.loss_strategy['converge'])
             loss_split_record = {
@@ -315,10 +346,24 @@ class CritiGraph(torch.nn.Module):
             cur_T1_type, cur_T2_type, cur_loss_type = "train", "train", "dyn" 
             new_locations = self.main_locations.clone().pin_memory() # (emb_size, tp)
             
+            # t_T2_splits4t.generate_connection(self.main_locations[:N_train])
+            # t_T2_splits4t.reset_all()
+            # for T1_block in T1_splits:
+            #     t_T2_splits4t[T1_block] = t_T2_splits4t.get_connection(t_idx[T1_block[0]:T1_block[1]])
+            # else:
             
+            if epoch % 20 == 0:
+                t_T2_splits4t.reset_indices()
+                for T1_block in T1_splits:
+                    t_T2_splits4t[T1_block] = t_T2_splits4t.get_connection(t_idx[T1_block[0]:T1_block[1]])
             
+    
+            mark(ED, "epoch_preparation", father="per_epoch")
+            mark(ST, "epoch_train")
             ### step 3.1: 训练
             for T1_block in T1_splits:
+                mark(ST, "per_T1_block")
+                mark(ST, "T1_preparation")
                 cur_T1_type   = get_T1_type(T1_block, N_train, N_valid, vocab_size)
                 emb_T1        = get_T1_emb (T1_block, t_eu_emb, v_eu_emb, vocab_emb, N_train, N_valid, vocab_size)  # (T1_block_size, dim)
                 sta_T1        = get_T1_idx (T1_block, t_idx, v_idx, vocab_idx, N_train, N_valid, vocab_size)        # (T1_block_size, )
@@ -346,20 +391,29 @@ class CritiGraph(torch.nn.Module):
                 _all_loss = torch.empty((len(self.devices), T1_block[1] - T1_block[0], 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True)
                 all_loss = torch.zeros((T1_block[1] - T1_block[0], 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, device=self.devices[0])
 
+                T2_splits       = t_T2_splits4v + vocab_T2_splits if cur_T1_type in ["valid", "vocab"] else [t_T2_splits4t] + vocab_T2_splits
                 
+                mark(ED, "T1_preparation", father="per_T1_block")
+                mark(ST, "T14T2")
                 for T2_block in T2_splits:
+                    mark(ST, "per_T2_block")
+                    mark(ST, "per_T2_preparation")
                     cur_T2_type   = get_T2_type(T2_block, N_train, vocab_size)
                     
                     if (cur_T1_type == "valid" and cur_T2_type == "vocab"):
                         continue
                     
                     cur_loss_type = get_loss_type(cur_T1_type, cur_T2_type, self.loss_strategy)
-                    emb_T2        = get_T2_emb (T2_block, t_eu_emb, vocab_emb, N_train, vocab_size)          # (T2_block_size, dim)
-                    pos_T2        = get_T2_idx (T2_block, t_idx, vocab_idx, N_train, vocab_size)             # (T2_block_size, )
-                    cur_loss      = self.loom(T1_block, T2_block, pos_T2, emb_T2, cur_loss_type, _all_loss)  # (T1_block_size, C, tp)
-
+                    emb_T2        = get_T2_emb (T1_block, T2_block, t_eu_emb, vocab_emb, N_train, vocab_size) # (T2, dim) or (T1, T2, dim)
+                    pos_T2        = get_T2_idx (T1_block, T2_block, t_idx, vocab_idx, N_train, vocab_size)    # (T2, )    or (T1, T2)
+                    mark(ED, "per_T2_preparation", father="per_T2_block")
+                    mark(ST, "per_T2_loom")
+                    cur_loss      = self.loom(T1_block, T2_block, pos_T2, emb_T2, cur_loss_type, _all_loss)   # (T1, C, tp)
+                    mark(ED, "per_T2_loom", father="per_T2_block")
+                    
+                    mark(ST, "per_T2_get_loss")
                     if   cur_T1_type == "train" and T2_block == vocab_T2_splits[-1]:
-                        lth         = mask_fill_scalar_expand(self.choosing_mask[0], N_train, self.sample_k, 1, self.converge)
+                        lth         = mask_fill_scalar_expand(self.choosing_mask[0], t_T2_splits4t.c if isinstance(t_T2_splits4t, BaseSample) else N_train, self.sample_k, 1, self.converge)
                         cur_loss    = cur_loss.to(all_loss.device, non_blocking=True)
                         loss_split_record["train_dyn_loss"]  += (self._get_best_loc(all_loss)[1] / lth).sum().item()        
                                                                                                                # (sum , mean, choose, mean)
@@ -378,12 +432,16 @@ class CritiGraph(torch.nn.Module):
                                       (1 - self.loss_strategy['ratio_dyn_sta']) * cur_loss / vocab_size)                 
                     else:
                         all_loss    += cur_loss.to(all_loss.device, non_blocking=True)
-                        if  cur_T1_type == "valid" and T2_block == t_T2_splits[-1]:
+                        if  cur_T1_type == "valid" and T2_block == t_T2_splits4v[-1]:
                             lth = mask_fill_scalar_expand(self.choosing_mask[0], N_train, self.sample_k, 1, self.converge)
                             loss_split_record["valid_dyn_loss"] += (self._get_best_loc(all_loss)[1] / lth).sum().item()        
                                                                                                              # (sum , mean, choose, mean)
                             all_loss = all_loss / lth[:, None, None]                                         # (keep, mean, keep  , keep)
-
+                    mark(ED, "per_T2_get_loss", father="per_T2_block")
+                    mark(ED, "per_T2_block")
+                mark(ED, "T14T2", father="per_T1_block")
+                
+                mark(ST, "T1_update")
                 selected_locs, _ = self._get_best_loc(all_loss, dev_num=0) # (T1_block_size, tp)
                 new_locations.index_copy_(
                     0,
@@ -391,13 +449,21 @@ class CritiGraph(torch.nn.Module):
                     selected_locs.view(-1, self.tp).cpu()
                 )
                 self.reset()
+                mark(ED, "T1_update", father="per_T1_block")
                 
+                mark(ED, "per_T1_block")
+            
+            mark(ED, "epoch_train", father="per_epoch")
+            
             ### step 3.2: 更新
+            mark(ST, "epoch_update")
             self.main_locations.copy_(new_locations, non_blocking=True)
             for i, dev in enumerate(self.devices):
                 self.locations[i].copy_(self.main_locations.to(dev, non_blocking=True), non_blocking=True)
+            mark(ED, "epoch_update", father="per_epoch")
             
             ### step 3.3: 记录与打印
+            mark(ST, "epoch_summary")
             print(f"epoch {epoch:3d} summary:", end=", ")
             for k, v in loss_split_record.items():
                 if   k.startswith('train'):
@@ -437,8 +503,11 @@ class CritiGraph(torch.nn.Module):
 
             print()
             
+            mark(ED, "epoch_summary", father="per_epoch")
+            mark(ED, "per_epoch")
+            
             ### step 3.5: 可视化。仅可视化前 256 个
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 100 == 0 or epoch == 0:
                 train_eu_emb = t_eu_emb[:256]                    # (256, dim)
                 valid_eu_emb = v_eu_emb[:256]                    # (256, dim)
                 S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
@@ -449,9 +518,13 @@ class CritiGraph(torch.nn.Module):
                 S_tt_ct      = self.distance(train_ct_emb[:, None, :], train_ct_emb[None, :, :], torch.ones((256, 256, 1))).mean(dim=-1).cpu().numpy()
                 S_vt_ct      = self.distance(valid_ct_emb[:, None, :], train_ct_emb[None, :, :], torch.ones((256, 256, 1))).mean(dim=-1).cpu().numpy()
 
-                visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+                # visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0), loss_dyn_dyn=loss_split_record["train_dyn_loss"] / N_train)
+                visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + f"CT_Sorted_T{N_train}_C{sample_factor}" + ".png", save_eu=(epoch == 0), loss_dyn_dyn=loss_split_record["train_dyn_loss"] / N_train)
                 visualize_pair_bihclust(S_vt_eu, S_vt_ct, meta_name="{}" + "valid_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
 
+        mark(ED, "all_epoch", father="total")
+        mark(ED, "total")
+        
     def reset(self):
         self.sta_T1        = [None for _ in range(len(self.devices))]
         self.sta_loc_T1    = [None for _ in range(len(self.devices))]

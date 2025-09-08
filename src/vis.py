@@ -11,7 +11,7 @@ from scipy.spatial.distance import pdist, squareform
 from src.para import *
 
 
-def visualize_similarity(S_eu: np.ndarray, S_ct: np.ndarray, meta_name="", save_eu=True):
+def visualize_similarity(S_eu: np.ndarray, S_ct: np.ndarray, meta_name="", save_eu=True, loss_dyn_dyn=0.):
     sim_ct_path = os.path.join(vis_path, meta_name.format("", "ct"))
     sim_eu_path = os.path.join(vis_path, meta_name.format("_", "eu"))
     
@@ -86,7 +86,7 @@ def visualize_similarity(S_eu: np.ndarray, S_ct: np.ndarray, meta_name="", save_
     im = ax.imshow(S_ct, cmap="inferno", norm=norm,
                    interpolation="nearest", aspect="equal")
     ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title("Hierarchical Cosine Similarity (ct)")
+    ax.set_title(f"Hierarchical Cosine Similarity (ct), loss={loss_dyn_dyn:.4f}")
 
     # 右侧颜色条
     cax = fig.add_subplot(gs[0, 2])

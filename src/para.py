@@ -4,9 +4,7 @@ from typing import Dict, Optional
 
 import torch
 
-from src.utils import LossTypeDict
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
@@ -16,9 +14,10 @@ parser.add_argument("--cte_eval_bs"    , type=int,   default=32,   help="CTE eva
 parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE evaluation iterations")
 parser.add_argument("--ratio_dyn_prob" , type=float, default=0.95, help="Ratio for dynamic and probability loss") 
 # 256: 0.962, 512: 0.9651
-parser.add_argument("--ratio_dyn_sta"  , type=float, default=0.6,  help="Ratio for dynamic and static loss")
+parser.add_argument("--ratio_dyn_sta"  , type=float, default=0.0,  help="Ratio for dynamic and static loss")
 parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
 parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
+parser.add_argument("--sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
 args = parser.parse_args()
 
 # hyperparameters
@@ -38,9 +37,11 @@ dropout           = 0.2
 
 h                 = 27
 tp                = 2
-c                 = 1 
+factor            = 1 
+sample_factor     = args.sample_factor  # 1.0
 eps               = 1e-5 
 division_fact     = 1
+sample_k          = 1
 
 
 ### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
@@ -53,7 +54,7 @@ cte_eval_iters    = args.cte_eval_iters  # 1
 cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
 cte_save_interval = 1
 
-T1_block_size     = 1024
+T1_block_size     = 2048
 T2_block_size     = 1024
 
 train_length      = args.train_length  # 512
@@ -64,11 +65,11 @@ loss_strategy: Dict = {
     'prob_loss' : 'js' ,    # prob: probability
     'weighted_dyn_prob': True,
     'weighted_dyn_sta' : True,
-    'converge': 50,
+    'converge': 20,
     'ratio_dyn_prob' : args.ratio_dyn_prob,  
     'ratio_dyn_sta'  : args.ratio_dyn_sta    
 }
-epoch_num=100
+epoch_num=10
 
 
 
@@ -102,15 +103,6 @@ epoch_cte=150
 ##### 'name': 'alternated', 表示交替优化, 一个 epoch 依次优化 dyn / sta / prob
 ##### 'name': 'weighted_dyn_prob'  , 表示加权优化. 需要额外指定 'ratio_dyn' 和 'ratio_prob', 且它们加和为 1
 
-TTT_loss_type : LossTypeDict = {
-    'dyn_loss'    : 'square'      , # dyn:  dynamic
-    -1: {
-        'target'  : 'TTT_only' , 
-        'converge': 80
-    }, 
-}
-epoch_cte_TTT=100
-sample_k = 1
 
 # ------------
 
@@ -184,5 +176,16 @@ gpt_path = './ckpt/gpt'
 cte_path = './ckpt/cte'
 cache_path = './data/'
 train_cache_path = './ckpt/cte'
-vis_path = f'./vis/b_{train_length}'
+vis_path = f'./vis/sample_b_{train_length}_sf{sample_factor}'
 os.makedirs(vis_path, exist_ok=True)
+
+
+
+
+
+
+
+
+
+ST = False
+ED = True
