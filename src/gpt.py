@@ -255,47 +255,61 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
 @torch.no_grad()
 def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int,):
     ### step 1: 读取缓存，并 pin 在 cpu。根据计算，10 ** 7 时也仅占用 15 GB
+    assert math.log2(train_length) % 1 == 0, "train_length 必须是 2 的整数次幂"
+    assert math.log2(val_length) % 1 == 0, "val_length 必须是 2 的整数次幂"
+    
+    
     train_cache = load_file(os.path.join(cache_path, cache_cktp.format(train_length, 'train')), device='cpu')
-    eval_cache = load_file(os.path.join(cache_path, cache_cktp.format(val_length, 'val')), device='cpu')
-    train_cache, eval_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(eval_cache)
+    valid_cache = load_file(os.path.join(cache_path, cache_cktp.format(val_length, 'val')), device='cpu')
+    train_cache, valid_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(valid_cache)
     
     ''' debug '''
     if args.truncate_valid > 0:
-        eval_cache['emb'] = eval_cache['emb'][:args.truncate_valid]
-        eval_cache['y'] = eval_cache['y'][:args.truncate_valid]
-        val_length = eval_cache['emb'].shape[0]
+        valid_cache['emb'] = valid_cache['emb'][:args.truncate_valid]
+        valid_cache['y'] = valid_cache['y'][:args.truncate_valid]
+        val_length = valid_cache['emb'].shape[0]
+    
+    ### step 2: 取出数据
+    gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu') # (N_vocab, n_embd), not pinned
+    sta_emb     = gpt_weights['token_embedding_table.weight']                      # (N_valid, n_embd), not pinned
+    train_emb   = torch.cat((train_cache['emb'][train_length - vocab_size], sta_emb.pin_memory()), dim=0)  
+                                                                                   # (N_train, n_embd), pinned memory
+    train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
+    valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory
+    valid_y     = valid_cache['y']                                                 # (N_valid, ),       pinned memory
     
     ### step 2: 初始化 GPT 和 CTE
-    emb_size = train_length + val_length + vocab_size
-    cte = CritiGraph(h, tp, factor, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
-    cte.eval()
-    
-    gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
-    sta_emb = gpt_weights['token_embedding_table.weight']  # type: ignore
+    emb_size    = train_length + val_length
+    cte         = CritiGraph(h, tp, factor, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
+    cte         .eval()
     
     ### step 3: 基本数据
-    train_ix = torch.arange(train_length, dtype=torch.long, device='cpu', pin_memory=True)                             # (train_length,)
-    eval_ix  = torch.arange(train_length, train_length + val_length, dtype=torch.long, device='cpu', pin_memory=True)  # (val_length,)
-    vocab_ix = torch.arange(train_length + val_length, emb_size, dtype=torch.long, device='cpu', pin_memory=True)      # (vocab_size,)
+    train_idx = torch.arange(0           , train_length, dtype=torch.long, device='cpu', pin_memory=True)  # (N_train,)
+    valid_idx = torch.arange(train_length, emb_size    , dtype=torch.long, device='cpu', pin_memory=True)  # (N_valid,)
+    
     
     ### step 4: 开始训练并同时测试
     #### step 4.1: 直接测 GPT 就好, 这里是在 cpu 上的，不要占 cuda 内存
     train_logits_eu = train_cache['emb'] @ sta_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
-    train_loss_eu = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
-    eval_logits_eu = eval_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
-    eval_loss_eu = F.cross_entropy(eval_logits_eu.view(-1, eval_logits_eu.size(-1)), eval_cache['y'], reduction='mean')
-    
+    train_loss_eu   = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
+    valid_logits_eu = valid_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
+    valid_loss_eu   = F.cross_entropy(valid_logits_eu.view(-1, valid_logits_eu.size(-1)), valid_cache['y'], reduction='mean')
+
     train_pred = train_logits_eu.argmax(dim=-1)            # (train_length,)
     train_acc = (train_pred == train_cache['y']).float().mean().item()
-    eval_pred = eval_logits_eu.argmax(dim=-1)              # (eval_length,)
-    eval_acc = (eval_pred == eval_cache['y']).float().mean().item()
-    
-    print(f"Before CTE Training: train eu loss: {train_loss_eu.item()}, eval eu loss: {eval_loss_eu.item()}")
-    print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {eval_acc}")
-    
+    valid_pred = valid_logits_eu.argmax(dim=-1)              # (eval_length,)
+    valid_acc = (valid_pred == valid_cache['y']).float().mean().item()
+
+    print(f"Before CTE Training: train eu loss: {train_loss_eu.item()}, eval eu loss: {valid_loss_eu.item()}")
+    print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {valid_acc}")
+
     #### step 4.2: CTE 训练与测试
-    cte(train_cache['emb'], train_cache['y'], eval_cache['emb'], eval_cache['y'], sta_emb, 
-        train_ix, eval_ix, vocab_ix, sample_factor=sample_factor)
+    cte.forward(
+        train_emb, valid_emb,
+        train_idx, valid_idx,
+        train_cache['y'], valid_cache['y'],
+        sample_factor=sample_factor
+    )
 
 
         # if visualization:    

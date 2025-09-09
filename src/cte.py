@@ -12,9 +12,9 @@ from tqdm import tqdm
 
 from src.gettime import gettime, mark
 from src.loom_kernel import triton_loom_wrapper
-from src.loss import compute_loss
-from src.para import ED, ST, T1_block_size, T2_block_size
-from src.sample import BaseSample, CTE_Sample, CTE_Sort_Sample, Expander_Sample
+from src.loss import compute_loss, compute_weighted_loss
+from src.para import ED, N_T, ST, T2_block_size, vocab_size
+from src.sample import BaseSample, Expander_Sample
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
 
@@ -90,410 +90,349 @@ class CritiGraph(torch.nn.Module):
         
     def calc_loss(self, 
                   ct_val : torch.Tensor, eu_val : torch.Tensor, 
-                  mask   : torch.Tensor,
-                  loss_type: str,
+                  mask   : torch.Tensor, lth    : torch.Tensor,
+                  S: int, S_: int, 
                   sum_dim  : int = 1
-    ) -> torch.Tensor:
-
-        loss = compute_loss(loss_type,  ct_val, eu_val, mask, sum_dim) # type: ignore
-        return loss # (B, T1, C, tp)
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        loss_type   = (self.loss_strategy['cos_loss'], self.loss_strategy['cro_loss'])
+        cro_weight  = (self.loss_strategy['ratio_cos'], self.loss_strategy['ratio_cro'])
+        loss_tot, loss_cos, loss_cro = compute_weighted_loss(
+            loss_type, cro_weight,
+            ct_val, eu_val, 
+            mask, lth,
+            S, S_,
+            sum_dim
+        ) 
+        return loss_tot, loss_cos, loss_cro
         
+    def generate_mask(self, S: int, S_: int, N_dyn: int):
+        assert S > 0
+        self.masks = []
+        self.lth = []
+        for i, dev in enumerate(self.devices):
+            s, e = self.sub_splits[i].start, self.sub_splits[i].stop
+            T1_local = e - s
+            with torch.cuda.device(dev), torch.cuda.stream(self.streams[i]):
+                mask = torch.ones((T1_local, S_), dtype=torch.bool, device=dev)
 
-    def get_neighbor(
-        self,
-        T1: int, T2_l: int, T2_r: int,
-        idx_s: int, idx_e: int,
-        dev_num: int = 0
-    ) -> torch.Tensor:
-        """
-        返回:
-            valid_mask: (B, cT)  布尔张量
-            counts    : (B,)     float32
-        说明:
-            - 内部持久化:
-                self.choosing_mask: (B,)  bool
-                self.valid_samples: (B, k) int64，"全选"行填 -1
-                self.all_idx: (n_all,) long，全选批次索引
-                self.sel_idx: (n_sel,) long，非全选批次索引
-                self.samples: (n_sel, k) int64，非全选批次的全局采样
-        """
-        device = self.devices[dev_num] if dev_num >= 0 else 'cpu'
-        cT2 = int(T2_r - T2_l)
-        
-        # ---------- 初始化 choosing_mask 与 valid_samples ----------
-        if getattr(self, "valid_samples", None) is None:            
-            # 80% 全选；20% 只用 k 个全局位置
-            
-            self.choosing_mask = (torch.rand((T1,), device=device) > 0.2)  # True=全选
-            k_eff = self.sample_k
+                if not self.converge:
+                    choosing_mask = (torch.rand((T1_local,), device=dev) > 0.2)  # True=整行在[0:S)全True
+                    sel_idx = (~choosing_mask).nonzero(as_tuple=False).squeeze(1)
+                    if sel_idx.numel() > 0:
+                        mask[sel_idx, :S] = False
+                        rows = sel_idx.repeat_interleave(self.sample_k)
+                        cols = torch.randint(0, S, (rows.numel(),), device=dev)
+                        mask[rows, cols] = True
 
-            # 占位: -1
-            self.valid_samples = torch.full(
-                (T1, k_eff),
-                -1,
-                dtype=torch.int64,
-                device=device,
-            )
+                if S_ > S:
+                    local_start = max(N_dyn, s) - s
+                    if local_start < T1_local:
+                        mask[local_start:, S:S_] = False
 
-            # 分批次索引持久化
-            self.all_idx = self.choosing_mask.nonzero(as_tuple=False).squeeze(1)   # 全选批次
-            self.sel_idx = (~self.choosing_mask).nonzero(as_tuple=False).squeeze(1)  # 非全选批次
+                lth_local = mask[:, :S].sum(dim=1).to(torch.int32) + 1e-12
+                self.masks.append(mask)
+                self.lth.append(lth_local)
 
-            # 对 20% 的“非全选”批次抽样
-            picked = torch.randint(
-                low=idx_s,
-                high=idx_e,
-                size=(self.sel_idx.numel(), k_eff),
-                device=device,
-                dtype=torch.int64
-            )  # (num_sel, k_eff)
-            self.valid_samples[self.sel_idx] = picked
+        for stream in self.streams:
+            stream.synchronize()
 
-            # 预存非全选的采样
-            self.samples = self.valid_samples.index_select(0, self.sel_idx)  # (m, k_eff)
-            
-            # 将所有生成的 self.xxx 变量迁移到各个设备
-            self.choosing_mask = [self.choosing_mask.to(device) for device in self.devices]
-            self.valid_samples = [self.valid_samples.to(device) for device in self.devices]
-            self.all_idx = [self.all_idx.to(device) for device in self.devices]
-            self.sel_idx = [self.sel_idx.to(device) for device in self.devices]
-            self.samples = [self.samples.to(device) for device in self.devices]
-            
-            return None
+    def get_mask(self, Tl: int, Tr: int, dev_num=0):
+        return self.masks[dev_num][Tl:Tr], self.lth[dev_num][real_Tl:real_Tr]
 
-        
-        # 收敛期：与旧逻辑一致
-        if self.converge:
-            return torch.ones((T1, cT2), dtype=torch.bool, device=device)
-
-
-        # ---------- 基于当前切片 [cT_l, cT_r) 生成局部 mask 与 counts ----------
-        pos = self.samples[dev_num] - int(T2_l)                   # (m, k)
-        in_slice = (pos >= 0) & (pos < cT2)               # (m, k)
-        if not in_slice.any():
-            if (T1, cT2, dev_num) not in self._valid_mask_cache:
-                valid_mask = torch.where(self.choosing_mask[dev_num].unsqueeze(1).expand(-1, cT2), True, False)
-                self._valid_mask_cache[(T1, cT2, dev_num)] = valid_mask
-
-            return self._valid_mask_cache[(T1, cT2, dev_num)]
-        
-        # 存在局部采样
-        valid_mask = torch.zeros((T1, cT2), dtype=torch.bool, device=device)
-        valid_mask[self.all_idx[dev_num]] = True
-        
-        rc = torch.nonzero(in_slice, as_tuple=False) # (p, 2)
-        b_idx = self.sel_idx[dev_num][rc[:, 0]]               # (p,)
-        cols = pos[rc[:, 0], rc[:, 1]].to(torch.int64)  # (p,)
-        valid_mask[b_idx, cols] = True
-
-        return valid_mask
-      
     
     @torch.no_grad()
     def loom(self, 
-             T1_block: Tuple[int, int], T2_block: Union[Tuple[int, int], BaseSample],
-             pos: torch.Tensor, # (T2, )    or (T1, T2, )
-             emb: torch.Tensor, # (T2, dim) or (T1, T2, dim)
-             loss_type: str,
-             _all_loss: torch.Tensor
+             block    : Tuple[int, int],
+             pos_idx  : torch.Tensor, # (T, S, )
+             pos_emb  : torch.Tensor, # (T, S, dim)
+             cur_type : str,
+             _loss_cos: torch.Tensor, # (T, C, D)
+             _loss_cro: torch.Tensor, # (T, C, D)
+             _loss_tot: torch.Tensor, # (T, C, D)
     ):
-        sample_flag = False
-        if isinstance(T2_block, BaseSample):
-            T2_block = T2_block.get_size()
-            sample_flag = True        
             
         ### step 1: 获取基本信息
-        T1 = T1_block[1] - T1_block[0]
-        cT2 = T2_block[1] - T2_block[0]
-        C, D   = 2 * self.k * self.h + 1, self.tp
+        T, S = pos_idx.size()
+        C, D = 2 * self.k * self.h + 1, self.tp
         
-        ### step 2: 获取切片
-        if loss_type == 'kl' or loss_type == 'js':
-            splits = [0, cT2] + [cT2] * (len(self.devices) - 1)
-        else:
-            splits = torch.linspace(0, cT2, len(self.devices) + 1, dtype=torch.int64)
-            splits = list(map(int, splits.tolist()))
-        
-        ### step 3: 开始计算
-        for i, (dev, stream, (s, e)) in enumerate(zip(self.devices, self.streams, zip(splits[:-1], splits[1:]))):
-            if s == e: 
-                _all_loss[i].copy_(torch.zeros_like(_all_loss[i], device=_all_loss[i].device), non_blocking=True)
-                continue
-            T2 = e - s
-            r_s, r_e = s + T2_block[0], e + T2_block[0]
+        ### step 2: 开始计算
+        for i, (dev, stream, split) in enumerate(zip(self.devices, self.streams, self.sub_splits)):
+            ### step 2.1: 基本数据
+            Tl, Tr = split.start, split.stop
+            subT = Tr - Tl
+            real_Tl, real_Tr = Tl + block[0], Tr + block[0]
             dev_num = i
             
+            ### step 2.2: 多 GPU 处理
             with torch.cuda.device(dev), torch.cuda.stream(stream): # type: ignore
-                ### 通信1：数据传输开始 ###        
-                pos_T2, emb_T2 = to_dev(
-                    pos, emb, 
-                    device=dev, s=s, e=e,
-                    dim = 1 if sample_flag else 0
+                ### step 2.2.1: 数据传输开始 ###        
+                sub_pos_idx, sub_pos_emb = to_dev(
+                    pos_idx, pos_emb, 
+                    device=dev, 
+                    s=Tl, e=Tr,
+                    dim=0
                 )
-                ### 通信1：数据传输结束 ###
+                ### step 2.2.1: 数据传输结束 ###
                  
                 
-                ### 计算：计算开始 ###
-                #### step 3.0: 计算欧式空间的值
-                emb_T1 = self.emb_T1[i] # (T1, dim)   
-                if sample_flag:
-                    val_v, val_n = normalized_matmul(emb_T1[:, None, :], emb_T2.transpose(1, 2), ori_prod=(loss_type == 'kl' or loss_type == 'js')) 
-                    val_v, val_n = val_v.squeeze(1), val_n.squeeze(1)
-                    # (T1, 1, T2) @ (T1, dim, T2) -> (T1, 1, T2) -> (T1, T2) 
-                else:             
-                    val_v, val_n = normalized_matmul(emb_T1, emb_T2.t(), ori_prod=(loss_type == 'kl' or loss_type == 'js')) # (T1, T2) 
-                    
-                if loss_type == 'kl' or loss_type == 'js':
-                    val_v = self.targets_T1[i][:, s:e].to(torch.float32) # (T1, T2)
-                    val_n = 20 * torch.ones_like(val_n) # (T1, T2)
-                else:
-                    val_n = torch.ones_like(val_n) # (T1, T2)
+                ### step 2.2.2: 计算开始 ###
+                ### step 2.2.2 (a): 获取基本信息，拼接张量
+                if cur_type == "train":
+                    sub_pos_idx = torch.cat([
+                        sub_pos_idx, self.voc_idx[i].unsqueeze(0).expand(subT, -1)
+                    ], dim=1) # (subT, S + N_sta)
+                    sub_pos_emb = torch.cat([
+                        sub_pos_emb, self.voc_emb[i].unsqueeze(0).expand(subT, -1, -1)
+                    ], dim=1) # (subT, S + N_sta, dim)
+                    # 称 S_ = S + N_sta 或者 S
+                S_ = sub_pos_idx.size(1)
+                mask, lth = self.get_mask(Tl, Tr, dev_num=dev_num)   
+                              # (subT, S_), (subT)
                 
-                # (T1, dim) -> (T1, 1, dim) @ (T1, dim, T2) -> (T1, 1, T2) -> (T1, T2)
+
+                ### step 2.2.2 (b): 计算欧式空间的值
+                sta_emb = self.sta_emb[i]        # (subT, dim)
+                eu_val, eu_norm = normalized_matmul(
+                    sta_emb[:, None, :],         # (subT, 1, dim )
+                    sub_pos_emb.transpose(1, 2), # (subT, dim, S_)
+                ) 
+                eu_val, eu_norm  = eu_val.squeeze(1), eu_norm.squeeze(1)
+                                                 # (subT, 1, dim) @ (subT, dim, S_) -> (subT, 1, S_) -> (subT, S_) 
+                eu_val [:, S:S_] = self.targets[i][Tl:Tr, :] if self.targets[i] is not None else 0
+                                                 # (subT, S:S_), 的部分放为 groundtruth, (subT, 0:S) 的部分维持
+                eu_norm[:, S:S_] = torch.ones_like(eu_norm[:, S:S_]) * 20 if self.targets[i] is not None else 0
+                                                 # (subT, S:S_), 的部分设为“真正的范数”，但是只是权宜之计
+                eu_norm[:, 0:S]  = torch.ones_like(eu_norm[:, 0:S ]) 
+                                                 # (subT, 0:S ), 的部分维持
+
                 
-                #### step 3.1: 获取基本信息
-                sta_loc = self.sta_loc_T1[i]        # (T1, tp)
-                pos_loc = self.locations[i][pos_T2] # (T2, tp) or (T1, T2, tp)
-                if not sample_flag:
-                    pos_loc = pos_loc.unsqueeze(0).expand(T1, -1, -1) # (T1, T2, tp) 
                 
-                dis_sta_pos     = self.distance(
-                    sta_loc[:, None, :]   , pos_loc[:, :, :]     , val_n[..., None]      
-                )               # (T1, T2, tp)
+                #### step 2.2.2 (c): 计算 CT 空间的值
+                #### step 2.2.2 (c1): 获取起点、候选位置
+                sta_loc = self.sta_loc[i]                # (subT, D)
+                pos_loc = self.locations[i][sub_pos_idx] # (subT, S_, D)
+                cnc_loc = self.cnc_loc[i]                # (subT, C , D)
                 
-                #### step 2: 获取候选位置（的值）
-                cnc_loc = self.cnc_loc_T1[i] # (T1, C, tp)
-                dis_sta_pos_sum = dis_sta_pos.sum(dim=-1) 
-                             # (T1, T2)
-                dis_cnc_pos     = self.distance(
-                    cnc_loc[:, None, :, :], pos_loc[:, :, None,:], val_n[..., None, None]
-                )            # (T1, T2, C, tp)
+                #### step 2.2.2 (c2): 计算距离
+                cos_sta_pos     = self.distance(
+                    sta_loc[:, None, :]   , pos_loc[:, :, :]     , eu_norm[..., None]      
+                )                                        # (subT, S_, D)
+                cos_sta_pos_sum = cos_sta_pos.sum(dim=-1) 
+                                                         # (subT, S_)
+                cos_cnc_pos     = self.distance(
+                    cnc_loc[:, None, :, :], pos_loc[:, :, None,:], eu_norm[..., None, None]
+                )                                        # (subT, S_, C, D)
                 ct_val          = (
-                    dis_sta_pos_sum[:, :, None, None] - dis_sta_pos[:, :, None, :] + dis_cnc_pos
-                ) / self.tp  # (T1, T2, C, tp)
-                             # 对于 T1 个 starting point，向 T2 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
+                    cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
+                ) / self.tp                              # (subT, S_, C, D)
+                # 对于 subT 个 starting point，向 S_ 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
                 
-                #### step 3: 计算 loss
-                ct_val    = ct_val                                                                # (T1, T2, C, tp)
-                eu_val    = val_v[..., None, None].expand(ct_val.shape)                           # (T1, T2, C, tp)
-                mask      = self.get_neighbor(T1, r_s, r_e, -1, -1, dev_num=dev_num,)             # (T1, T2)
-                loss      = self.calc_loss(ct_val, eu_val, mask[..., None, None],  
-                                           loss_type=loss_type)                                   # (T1, C, tp)           
+                #### step 2.2.2 (c3): 计算 loss
+                ct_val    = ct_val                                         # (subT, S_, C, D)
+                eu_val    = eu_val[..., None, None].expand(ct_val.shape)   # (subT, S_, C, D)
+
+                loss_tot, loss_cos, loss_cro = self.calc_loss(
+                    ct_val, eu_val, 
+                    mask[..., None, None], lth,
+                    S, S_
+                )                                                          # (subT, C, tp)           
                 ### 计算：计算结束 ###
                 
                 ### 通信2：数据传输开始 ###
-                _all_loss[i].copy_(loss, non_blocking=True)
+                _loss_cos[Tl:Tr].copy_(loss_cos, non_blocking=True)
+                _loss_cro[Tl:Tr].copy_(loss_cro, non_blocking=True)
+                _loss_tot[Tl:Tr].copy_(loss_tot, non_blocking=True)
                 ### 通信2：数据传输结束 ###
         
         for i, stream in enumerate(self.streams):
             stream.synchronize()
         
-        return _all_loss.sum(dim=0) # (T1, C, tp)
 
 
     @gettime(fmt='ms', pr=False)
     def forward(self,        
-                t_eu_emb  : torch.Tensor, # (N_train, dim),    pinned memory
-                t_targets : torch.Tensor, # (N_train, )   ,    pinned memory
-                v_eu_emb  : torch.Tensor, # (N_valid, dim),    pinned memory
-                v_targets : torch.Tensor, # (N_valid, )   ,    pinned memory
-                vocab_emb : torch.Tensor, # (vocab_size, dim), pinned memory
-                t_idx     : torch.Tensor, # (N_train, )   ,    pinned memory
-                v_idx     : torch.Tensor, # (N_valid, )   ,    pinned memory
-                vocab_idx : torch.Tensor, # (vocab_size, ),    pinned memory
-                sample_factor: float = 1.,
-                ### 以上张量全部放在 cpu，避免占用 gpu 内存
-        ): 
-        mark(ST, "total")
-        mark(ST, "preparation")
-        ### step 1: 获取基本信息
-        N_train, N_valid, vocab_size = t_eu_emb.size(0), v_eu_emb.size(0), vocab_idx.size(0)
-        # 在这里，我们需要拟合的是一个 (N_train + N_valid, N_train + vocab_size) 的矩阵
-        # 所以，外层循环遍历第一维，根据 T1_block_size 来划分
-        # 内层循环遍历第二维，根据 T2_block_size 来划分
-        t_T1_splits     = make_splits(0, N_train, T1_block_size)
-        v_T1_splits     = make_splits(N_train, N_train + N_valid, T1_block_size)
-        vocab_T1_splits = [(N_train + N_valid, N_train + N_valid + vocab_size)] 
-        T1_splits       = t_T1_splits + v_T1_splits + vocab_T1_splits
+        train_emb : torch.Tensor, # (N_train, dim), pinned memory
+        valid_emb : torch.Tensor, # (N_valid, dim), pinned memory
         
-        t_T2_splits4t   = make_splits(0, N_train, T2_block_size)
-        t_T2_splits4t   = Expander_Sample(N_train, int(int(math.log2(N_train)) ** 2 * sample_factor))
-        # t_T2_splits4t   = CTE_Sort_Sample(int(int(math.log2(N_train)) ** 2 * sample_factor))
-        t_T2_splits4t.generate_connection()
-        for T1_block in T1_splits:
-            t_T2_splits4t[T1_block] = t_T2_splits4t.get_connection(t_idx[T1_block[0]:T1_block[1]])
-        t_T2_splits4v   = make_splits(0, N_train, T2_block_size)
-        vocab_T2_splits = [(N_train, N_train + vocab_size)]
-        
-        ### step 2: 准备训练时常量
-        neighbor_idx = {"train": (0, t_T2_splits4t.c if isinstance(t_T2_splits4t, BaseSample) else N_train + vocab_size), "valid": (0, N_train), "vocab": (N_train, N_train + vocab_size)}
+        train_idx : torch.Tensor, # (N_train, )   , pinned memory
+        valid_idx : torch.Tensor, # (N_valid, )   , pinned memory
 
-        mark(ED, "preparation", father="total")
-        ### step 3: 遍历所有 epoch
+        train_tar : torch.Tensor, # (N_train, )   , pinned memory
+        valid_tar : torch.Tensor, # (N_valid, )   , pinned memory
+        
+        sample_factor: float = 1.,
+        ### 以上张量全部放在 cpu，避免占用 gpu 内存
+    ):  
+        """
+        我们需要拟合的是一个：(N_train, N_train) 的矩阵，以及 (N_valid, N_train) 的矩阵
+        并且构造 (N_dyn, N_sta) 的 groundtruth，向它对齐
+        """
+        mark(ST, "all")
+        mark(ST, "all_preparation")
+        
+        
+        ### step 1: 获取基本信息
+        N_train, N_valid = train_emb.size(0), valid_emb.size(0)
+        N_dyn  , N_sta   = N_train - vocab_size, vocab_size
+        dyn_slice        = slice(0, N_dyn)
+        sta_slice        = slice(N_dyn, N_train)
+        assert N_train % N_T == 0 and N_valid % N_T == 0, "N_train 和 N_valid 必须是 N_T 的整数倍"
+        
+        
+        ### step 2: 构造分块与采样
+        train_splits = make_splits(0      , N_train          , N_T) 
+        valid_splits = make_splits(N_train, N_train + N_valid, N_T)
+        splits       = train_splits + valid_splits
+        sampler      = Expander_Sample(N_train, N_valid, int(int(math.log2(N_train)) ** 2 * sample_factor))
+        sampler      .generate_connection(splits, train_idx, valid_idx)
+
+        ### step 3: 固定全局不变信息
+        self.voc_emb = [train_emb[sta_slice].to(dev, non_blocking=True) for dev in self.devices] # (N_sta, dim)
+        self.voc_idx = [train_idx[sta_slice].to(dev, non_blocking=True) for dev in self.devices] # (N_sta, )
+        _loss_cos = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
+        _loss_cro = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
+        _loss_tot = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
+        mark(ED, "all_preparation", father="all")
+        
+        
         mark(ST, "all_epoch")
+        ### step 3: 遍历所有 epoch
         for epoch in range(self.epoch_num):
-            mark(ST, "per_epoch")
+            mark(ST, "epoch")
             mark(ST, "epoch_preparation")
             self.epoch = epoch
-            self.converge = self.loss_strategy['converge'] is not None and (self.epoch  >= self.loss_strategy['converge'])
-            loss_split_record = {
-                "train_dyn_loss" :  0,
-                "train_prob_loss":  0,
-                "valid_dyn_loss" :  0,
-                "vocab_dyn_loss" :  0,
-                "vocab_sta_loss" :  0
-            }
-            cur_T1_type, cur_T2_type, cur_loss_type = "train", "train", "dyn" 
+            self.converge = self.loss_strategy['converge'] is not None and (self.epoch >= self.loss_strategy['converge'])
+            cur_type, cur_loss_type = "train", "cos" 
             new_locations = self.main_locations.clone().pin_memory() # (emb_size, tp)
             
-            # t_T2_splits4t.generate_connection(self.main_locations[:N_train])
-            # t_T2_splits4t.reset_all()
-            # for T1_block in T1_splits:
-            #     t_T2_splits4t[T1_block] = t_T2_splits4t.get_connection(t_idx[T1_block[0]:T1_block[1]])
-            # else:
-            
             if epoch % 20 == 0:
-                t_T2_splits4t.reset_indices()
-                for T1_block in T1_splits:
-                    t_T2_splits4t[T1_block] = t_T2_splits4t.get_connection(t_idx[T1_block[0]:T1_block[1]])
+                sampler.reset_indices("train")
+            if epoch % 2  == 0:
+                sampler.reset_indices("valid")
             
-    
-            mark(ED, "epoch_preparation", father="per_epoch")
+            mark(ED, "epoch_preparation", father="epoch")
             mark(ST, "epoch_train")
             ### step 3.1: 训练
-            for T1_block in T1_splits:
-                mark(ST, "per_T1_block")
-                mark(ST, "T1_preparation")
-                cur_T1_type   = get_T1_type(T1_block, N_train, N_valid, vocab_size)
-                emb_T1        = get_T1_emb (T1_block, t_eu_emb, v_eu_emb, vocab_emb, N_train, N_valid, vocab_size)  # (T1_block_size, dim)
-                sta_T1        = get_T1_idx (T1_block, t_idx, v_idx, vocab_idx, N_train, N_valid, vocab_size)        # (T1_block_size, )
-                targets_T1    = get_T1_targets (T1_block, t_targets, N_train, N_valid, vocab_size)                  # (T1_block_size, )  
-                targets_T1    = F.one_hot(targets_T1, num_classes=vocab_size) * 1e2 if not (targets_T1 == -1).any() else None     
-                                                                                                                    # (T1_block_size, vocab_size)   
-                self.get_neighbor(T1_block[1] - T1_block[0], -1, -1, 
-                                *neighbor_idx[cur_T1_type],
-                                dev_num=-1) 
+            for block in splits:
+                mark(ST, "block")
+                mark(ST, "block_preparation")
+                ### step 3.1.0: 获取基本信息
+                bs         = block[1] - block[0]
+                assert bs == N_T, "每个 block 的大小必须等于 N_T"
+                loss_split_record = {
+                    "train_cos_loss" :  0.,
+                    "train_cro_loss" :  0.,
+                    "train_tot_loss" :  0.,
+                    "train_cos_loss" :  0.,
+                    "train_cro_loss" :  0.,
+                    "train_tot_loss" :  0.,
+                }
+                cur_type   = get_type (block, N_train, N_valid)  # 'train' / 'vocab' / 'valid'
+                sta_emb    = get_emb  (block, N_train, N_valid, train_emb, valid_emb)  # (N_T, dim)
+                sta_idx    = get_idx  (block, N_train, N_valid, train_idx, valid_idx)  # (N_T, )
+                targets    = get_tar  (block, N_train         , train_tar,          )  # (N_T, )  
+                targets    = F.one_hot(targets, num_classes=N_sta) * 1e2 if targets is not None else None     
+                                                                                       # (N_T, N_sta), 可能为 None    
+                                                                                              
+                ### step 3.1.1: 分配 T 的各个 sub 块到各个 GPU 上
+                sub_splits = list(map(int, 
+                    torch.linspace(0, block[1] - block[0], len(self.devices) + 1, dtype=torch.int64).tolist()            
+                ))
+                sub_splits = [slice(sub_splits[i], sub_splits[i+1]) for i in range(len(sub_splits) - 1)]
+                self.sub_splits = sub_splits
+                zip_s_d     = zip(sub_splits, self.devices)
+                
+                ### step 3.1.2: 准备全局连接信息、可见邻居信息
+                sta_loc   = self.main_locations[sta_idx]           # (N_T, tp)
+                cnc_loc   = self.connection(sta_loc, dev_num=-1)   # (N_T, C, tp)
+                self      .generate_mask(
+                    sampler.S,
+                    sampler.S + N_sta if cur_type == "train" else 0,
+                    N_dyn
+                )                # 生成 mask
+                
+                ### step 3.1.3: 将数据分配到各个 GPU 上
+                self.sta_emb = [sta_emb[s].to(dev, non_blocking=True) for s, dev in zip_s_d]
+                self.targets = [targets[s].to(dev, non_blocking=True) for s, dev in zip_s_d] if targets is not None else [None for _ in self.devices]
+                self.sta_idx = [sta_idx[s].to(dev, non_blocking=True) for s, dev in zip_s_d]
+                self.sta_loc = [sta_loc[s].to(dev, non_blocking=True) for s, dev in zip_s_d]
+                self.cnc_loc = [cnc_loc[s].to(dev, non_blocking=True) for s, dev in zip_s_d]
 
+                ### step 3.1.4: 获取 pos 信息
+                pos_idx = train_idx[sampler[block]] # (T, S, )
+                pos_emb = train_emb[sampler[block]] # (T, S, dim)
+                mark(ED, "block_preparation", father="block")
+                
+                
+                mark(ST, "block_calc")
+                ### step 3.1.5: 计算 loss
+                self.loom(block, pos_idx, pos_emb, cur_type, _loss_cos, _loss_cro, _loss_tot)
+                selected_locs, real_loss_cos, real_loss_cro, real_loss_tot = self._get_best_loc(
+                    cnc_loc,
+                    _loss_cos, _loss_cro, _loss_tot, 
 
-                
-                sta_loc_T1    = self.main_locations[sta_T1]                          # (T1_block_size, tp)
-                cnc_loc_T1    = self.connection(sta_loc_T1, dev_num=-1)              # (T1_block_size, C, tp)
-                
-                
-                self.emb_T1     = [emb_T1.to(dev, non_blocking=True) for dev in self.devices]
-                self.targets_T1 = [targets_T1.to(dev, non_blocking=True) for dev in self.devices] if targets_T1 is not None else [None for dev in self.devices]
-                self.sta_T1     = [sta_T1.to(dev, non_blocking=True) for dev in self.devices]
-                self.sta_loc_T1 = [sta_loc_T1.to(dev, non_blocking=True) for dev in self.devices]
-                self.cnc_loc_T1 = [cnc_loc_T1.to(dev, non_blocking=True) for dev in self.devices]
-                
-                torch.cuda.synchronize()
-                
-                _all_loss = torch.empty((len(self.devices), T1_block[1] - T1_block[0], 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True)
-                all_loss = torch.zeros((T1_block[1] - T1_block[0], 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, device=self.devices[0])
-
-                T2_splits       = t_T2_splits4v + vocab_T2_splits if cur_T1_type in ["valid", "vocab"] else [t_T2_splits4t] + vocab_T2_splits
-                
-                mark(ED, "T1_preparation", father="per_T1_block")
-                mark(ST, "T14T2")
-                for T2_block in T2_splits:
-                    mark(ST, "per_T2_block")
-                    mark(ST, "per_T2_preparation")
-                    cur_T2_type   = get_T2_type(T2_block, N_train, vocab_size)
-                    
-                    if (cur_T1_type == "valid" and cur_T2_type == "vocab"):
-                        continue
-                    
-                    cur_loss_type = get_loss_type(cur_T1_type, cur_T2_type, self.loss_strategy)
-                    emb_T2        = get_T2_emb (T1_block, T2_block, t_eu_emb, vocab_emb, N_train, vocab_size) # (T2, dim) or (T1, T2, dim)
-                    pos_T2        = get_T2_idx (T1_block, T2_block, t_idx, vocab_idx, N_train, vocab_size)    # (T2, )    or (T1, T2)
-                    mark(ED, "per_T2_preparation", father="per_T2_block")
-                    mark(ST, "per_T2_loom")
-                    cur_loss      = self.loom(T1_block, T2_block, pos_T2, emb_T2, cur_loss_type, _all_loss)   # (T1, C, tp)
-                    mark(ED, "per_T2_loom", father="per_T2_block")
-                    
-                    mark(ST, "per_T2_get_loss")
-                    if   cur_T1_type == "train" and T2_block == vocab_T2_splits[-1]:
-                        lth         = mask_fill_scalar_expand(self.choosing_mask[0], t_T2_splits4t.c if isinstance(t_T2_splits4t, BaseSample) else N_train, self.sample_k, 1, self.converge)
-                        cur_loss    = cur_loss.to(all_loss.device, non_blocking=True)
-                        loss_split_record["train_dyn_loss"]  += (self._get_best_loc(all_loss)[1] / lth).sum().item()        
-                                                                                                               # (sum , mean, choose, mean)
-                        loss_split_record["train_prob_loss"] += (self._get_best_loc(cur_loss)[1]).sum().item()              
-                                                                                                               # (sum , sum , choose, mean) 
-                        all_loss    = (self.loss_strategy['ratio_dyn_prob']  * all_loss / lth[:, None, None] + # (keep, mean, keep  , keep)
-                                      (1 - self.loss_strategy['ratio_dyn_prob']) * cur_loss)                   # (keep, sum , keep  , keep)
-                    elif cur_T1_type == "vocab" and T2_block == vocab_T2_splits[-1]:
-                        lth         = mask_fill_scalar_expand(self.choosing_mask[0], N_train, self.sample_k, 1, self.converge)
-                        cur_loss    = cur_loss.to(all_loss.device, non_blocking=True)
-                        loss_split_record["vocab_dyn_loss"]  += (self._get_best_loc(all_loss)[1] / lth).sum().item()        
-                                                                                                               # (sum , mean, choose, mean)
-                        loss_split_record["vocab_sta_loss"]  += (self._get_best_loc(cur_loss)[1] / vocab_size).sum().item()              
-                                                                                                               # (sum , mean, choose, mean) 
-                        all_loss    = (self.loss_strategy['ratio_dyn_sta']  * all_loss / lth[:, None, None] +  # (keep, mean, keep  , keep)
-                                      (1 - self.loss_strategy['ratio_dyn_sta']) * cur_loss / vocab_size)                 
-                    else:
-                        all_loss    += cur_loss.to(all_loss.device, non_blocking=True)
-                        if  cur_T1_type == "valid" and T2_block == t_T2_splits4v[-1]:
-                            lth = mask_fill_scalar_expand(self.choosing_mask[0], N_train, self.sample_k, 1, self.converge)
-                            loss_split_record["valid_dyn_loss"] += (self._get_best_loc(all_loss)[1] / lth).sum().item()        
-                                                                                                             # (sum , mean, choose, mean)
-                            all_loss = all_loss / lth[:, None, None]                                         # (keep, mean, keep  , keep)
-                    mark(ED, "per_T2_get_loss", father="per_T2_block")
-                    mark(ED, "per_T2_block")
-                mark(ED, "T14T2", father="per_T1_block")
-                
-                mark(ST, "T1_update")
-                selected_locs, _ = self._get_best_loc(all_loss, dev_num=0) # (T1_block_size, tp)
+                ) # (T), (T), (T), (T)
                 new_locations.index_copy_(
                     0,
-                    sta_T1.view(-1),
-                    selected_locs.view(-1, self.tp).cpu()
+                    sta_idx,
+                    selected_locs.view(-1, self.tp)
                 )
-                self.reset()
-                mark(ED, "T1_update", father="per_T1_block")
+                loss_split_record[f"{cur_type}_cos_loss"] += float(real_loss_cos.sum().item())
+                loss_split_record[f"{cur_type}_cro_loss"] += float(real_loss_cro.sum().item())
+                loss_split_record[f"{cur_type}_tot_loss"] += float(real_loss_tot.sum().item())
+                mark(ED, "block_calc", father="block")
+                mark(ED, "block")
                 
-                mark(ED, "per_T1_block")
-            
-            mark(ED, "epoch_train", father="per_epoch")
+            mark(ED, "epoch_train", father="epoch")
             
             ### step 3.2: 更新
             mark(ST, "epoch_update")
             self.main_locations.copy_(new_locations, non_blocking=True)
             for i, dev in enumerate(self.devices):
                 self.locations[i].copy_(self.main_locations.to(dev, non_blocking=True), non_blocking=True)
-            mark(ED, "epoch_update", father="per_epoch")
-            
+            mark(ED, "epoch_update", father="epoch")
+
+
             ### step 3.3: 记录与打印
-            mark(ST, "epoch_summary")
-            print(f"epoch {epoch:3d} summary:", end=", ")
+            print(f"epoch {epoch:3d} summary:", end=" ")
             for k, v in loss_split_record.items():
                 if   k.startswith('train'):
                     v /= N_train
                 elif k.startswith('valid'):
                     v /= N_valid
-                elif k.startswith('vocab'):
-                    v /= vocab_size
                 
                 print(f"{k:15s}: {v:.4f}", end=", ")
             
+            
             ### step 3.4: 验证
+            mark(ST, "epoch_valid")
             for split in ['train', 'valid']:
-                splits  = t_T1_splits if split == 'train' else v_T1_splits
-                dyn_idx = t_idx       if split == 'train' else v_idx
-                dyn_emb = t_eu_emb    if split == 'train' else v_eu_emb
-                targets = t_targets   if split == 'train' else v_targets
-                N       = N_train     if split == 'train' else N_valid
+                splits  = train_splits         if split == 'train' else valid_splits
+                dyn_idx = train_idx[dyn_slice] if split == 'train' else valid_idx
+                dyn_emb = train_emb[dyn_slice] if split == 'train' else valid_emb
+                sta_idx = train_idx[sta_slice] 
+                sta_emb = train_emb[sta_slice]
+                targets = train_tar[dyn_slice] if split == 'train' else valid_tar
+                N       = N_train              if split == 'train' else N_valid
                 loss    = 0
                 accuray = 0
                 
                 for block in splits:
                     Tl, Tr      = block if split == 'train' else (block[0] - N_train, block[1] - N_train)
-                    dyn_loc     = self.locations[0][dyn_idx[Tl:Tr].to(self.devices[0], non_blocking=True)] # (T1, tp)
-                    vocab_loc   = self.locations[0][vocab_idx.to(self.devices[0], non_blocking=True)] # (N_vocab, tp)
+                    if split == 'train' and Tr > N_dyn:
+                        Tr = N_dyn
+            
+                    dyn_loc     = self.locations[0][dyn_idx[Tl:Tr].to(self.devices[0], non_blocking=True)] # (T, D)
+                    sta_loc     = self.locations[0][sta_idx       .to(self.devices[0], non_blocking=True)] # (V, D)
                     _, norm     = normalized_matmul(
-                        dyn_emb[Tl:Tr]. to(self.devices[0], non_blocking=True), 
-                        vocab_emb.to(self.devices[0], non_blocking=True).t()
-                    ) # (T1, N_vocab)
-                    ct_val      = self.distance(dyn_loc[:, None, :], vocab_loc[None, :, :], norm[..., None]).mean(dim=-1) # (T1, N_vocab)
+                        dyn_emb[Tl:Tr].to(self.devices[0], non_blocking=True), 
+                        sta_emb       .to(self.devices[0], non_blocking=True).t()
+                    ) # (T, V)
+                    ct_val      = self.distance(
+                        dyn_loc[:, None, :], # (T, 1, D) 
+                        sta_loc[None, :, :], # (1, V, D)
+                        norm   [..., None]   # (T, V, 1)
+                    ).mean(dim=-1) # (T, V)
                     loss       += F.cross_entropy(ct_val, targets[Tl:Tr].to(self.devices[0], non_blocking=True), reduction='sum').item()
                     accuray    += (ct_val.argmax(dim=-1) == targets[Tl:Tr].to(self.devices[0], non_blocking=True)).sum().item()
                 
@@ -503,44 +442,55 @@ class CritiGraph(torch.nn.Module):
 
             print()
             
-            mark(ED, "epoch_summary", father="per_epoch")
-            mark(ED, "per_epoch")
+            mark(ED, "epoch_valid", father="epoch")
+            mark(ED, "epoch")
             
             ### step 3.5: 可视化。仅可视化前 256 个
             if (epoch + 1) % 100 == 0 or epoch == 0:
-                train_eu_emb = t_eu_emb[:256]                    # (256, dim)
-                valid_eu_emb = v_eu_emb[:256]                    # (256, dim)
+                train_eu_emb = train_emb[:256]                    # (256, dim)
+                valid_eu_emb = valid_emb[:256]                    # (256, dim)
                 S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
                 S_vt_eu      = normalized_matmul(valid_eu_emb, train_eu_emb.t())[0].cpu().numpy()
                 
-                train_ct_emb = self.main_locations[t_idx[:256]]  # (256, tp)
-                valid_ct_emb = self.main_locations[v_idx[:256]]  # (256, tp)
+                train_ct_emb = self.main_locations[train_idx[:256]]  # (256, tp)
+                valid_ct_emb = self.main_locations[valid_idx[:256]]  # (256, tp)
                 S_tt_ct      = self.distance(train_ct_emb[:, None, :], train_ct_emb[None, :, :], torch.ones((256, 256, 1))).mean(dim=-1).cpu().numpy()
                 S_vt_ct      = self.distance(valid_ct_emb[:, None, :], train_ct_emb[None, :, :], torch.ones((256, 256, 1))).mean(dim=-1).cpu().numpy()
 
-                # visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0), loss_dyn_dyn=loss_split_record["train_dyn_loss"] / N_train)
-                visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + f"CT_Sorted_T{N_train}_C{sample_factor}" + ".png", save_eu=(epoch == 0), loss_dyn_dyn=loss_split_record["train_dyn_loss"] / N_train)
+                visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0), loss_dyn_dyn=loss_split_record["train_dyn_loss"] / N_train)
+                # visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + f"CT_Sorted_T{N_train}_C{sample_factor}" + ".png", save_eu=(epoch == 0), loss_dyn_dyn=loss_split_record["train_dyn_loss"] / N_train)
                 visualize_pair_bihclust(S_vt_eu, S_vt_ct, meta_name="{}" + "valid_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
 
-        mark(ED, "all_epoch", father="total")
-        mark(ED, "total")
+        mark(ED, "all_epoch", father="all")
+        mark(ED, "all")
         
-    def reset(self):
-        self.sta_T1        = [None for _ in range(len(self.devices))]
-        self.sta_loc_T1    = [None for _ in range(len(self.devices))]
-        self.cnc_loc_T1    = [None for _ in range(len(self.devices))]
-        self.valid_samples = None
+    def reset_block(self):
+        self.sta_idx    = [None for _ in range(len(self.devices))]
+        self.sta_emb    = [None for _ in range(len(self.devices))]
+        self.sta_loc    = [None for _ in range(len(self.devices))]
+        self.cnc_loc    = [None for _ in range(len(self.devices))]
+        self.targets    = [None for _ in range(len(self.devices))]
         self._valid_mask_cache = {}
 
-    def _get_best_loc(self, loss: torch.Tensor, dev_num: int = 0) -> Tuple[torch.Tensor, torch.Tensor]:
-        device = self.devices[dev_num] if dev_num >= 0 else 'cpu'
+    def _get_best_loc(self, 
+                      cnc_loc : torch.Tensor, # (T, C, D)
+                      loss_cos: torch.Tensor, 
+                      loss_cro: torch.Tensor,
+                      loss_tot: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        device = 'cpu'
         
-        cnc_indices   = torch.argmin(loss, dim=1)                                        # (T1, tp)
-        T1_indices    = torch.arange(self.sta_loc_T1[0].size(0), device=device)[:, None] # (T1, 1)
-        dim_indices   = torch.arange(self.tp    ,                device=device)[None :]  # (1, tp)
-        selected_locs = self.cnc_loc_T1[dev_num][T1_indices, cnc_indices, dim_indices]   # (T1, tp)
-        real_loss     = loss[T1_indices, cnc_indices, dim_indices].mean(dim=-1)          # (T1, ) 
-        return selected_locs, real_loss
+        cnc_indices   = torch.argmin(loss_tot, dim=1)                                    # (T, D)
+        T_indices     = torch.arange(cnc_loc.size(0),    device=device)[:, None]         # (T, 1)
+        dim_indices   = torch.arange(self.tp    ,        device=device)[None  :]         # (1, D)
+        selected_locs = cnc_loc[T_indices, cnc_indices,  dim_indices]                    # (T, D)
+        
+        real_loss_cos = loss_cos[T_indices, cnc_indices, dim_indices].mean(dim=-1)       # (T, )
+        real_loss_cro = loss_cro[T_indices, cnc_indices, dim_indices].mean(dim=-1)       # (T, )
+        real_loss_tot = loss_tot[T_indices, cnc_indices, dim_indices].mean(dim=-1)       # (T, ) 
+        
+        return selected_locs, real_loss_cos, real_loss_cro, real_loss_tot
+
     
 if __name__ == "__main__":
     pass

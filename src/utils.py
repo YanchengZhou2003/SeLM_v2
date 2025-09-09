@@ -1130,72 +1130,69 @@ def make_splits(start: int, end: int, block_size: int) -> List[Tuple[int, int]]:
     return splits
 
 
-def get_T1_type(T1_block: Tuple[int, int], N_train: int, N_valid: int, vocab_size: int) -> str:
+def get_type(block: Tuple[int, int], N_train: int, N_valid: int) -> str:
     """
-    根据 T1_block 的起止位置，判断其类型：
+    根据 block 的起止位置，判断其类型：
       - 'train' : 完全在训练集范围内 [0, N_train)
       - 'valid' : 完全在验证集范围内 [N_train, N_train + N_valid)
-      - 'cross' : 跨越训练集和验证集边界
     """
-    start, end = T1_block
+    start, end = block
     if start < 0 or end <= start:
-        raise ValueError(f"Invalid T1_block {T1_block}")
+        raise ValueError(f"Invalid block {block}")
     if end <= N_train:
         return 'train'
     elif start >= N_train and end <= N_train + N_valid:
         return 'valid'
-    elif start >= N_train + N_valid and end <= N_train + N_valid + vocab_size:
-        return 'vocab'
     else:
-        raise ValueError(f"T1_block {T1_block} out of range for train+valid+vocab sizes {N_train+N_valid+vocab_size}")
+        raise ValueError(f"Block {block} out of range for train+valid sizes {N_train + N_valid}")
     
     
-def get_T1_emb(T1_block: Tuple[int, int], t_eu_emb: torch.Tensor, v_eu_emb: torch.Tensor, vocab_emb: torch.Tensor, 
-               N_train: int, N_valid: int, vocab_size: int) -> torch.Tensor:
+    
+def get_emb(block: Tuple[int, int], 
+            N_train  : int,          N_valid  : int,
+            train_emb: torch.Tensor, valid_emb: torch.Tensor, 
+    ) -> torch.Tensor:
     """
-    根据 T1_block 的起止位置，获取对应的嵌入表示。
+    根据 block 的起止位置，获取对应的嵌入表示。
     """
-    start, end = T1_block
+    start, end = block
     if start < 0 or end <= start:
-        raise ValueError(f"Invalid T1_block {T1_block}")
+        raise ValueError(f"Invalid block {block}")
     if end <= N_train:
-        return t_eu_emb[start:end]
+        return train_emb[start:end]
     elif start >= N_train and end <= N_train + N_valid:
-        return v_eu_emb[start - N_train:end - N_train]
-    elif start >= N_train + N_valid and end <= N_train + N_valid + vocab_emb.size(0):
-        return vocab_emb[start - N_train - N_valid:end - N_train - N_valid]
+        return valid_emb[start - N_train:end - N_train]
     else:
-        raise ValueError(f"T1_block {T1_block} out of range for train+valid+vocab sizes {N_train+N_valid+vocab_emb.size(0)}")
+        raise ValueError(f"Block {block} out of range for train+valid sizes {N_train + N_valid}")
     
-def get_T1_idx(T1_block: Tuple[int, int], t_idx: torch.Tensor, v_idx: torch.Tensor, vocab_idx: torch.Tensor, 
-               N_train: int, N_valid: int, vocab_size: int) -> torch.Tensor:
+def get_idx(block: Tuple[int, int], 
+            N_train  : int,          N_valid  : int,
+            train_idx: torch.Tensor, valid_idx: torch.Tensor
+    ) -> torch.Tensor:
     """
-    根据 T1_block 的起止位置，获取对应的索引。
+    根据 block 的起止位置，获取对应的索引。
     """
-    start, end = T1_block
+    start, end = block
     if start < 0 or end <= start:
-        raise ValueError(f"Invalid T1_block {T1_block}")
+        raise ValueError(f"Invalid block {block}")
     if end <= N_train:
-        return t_idx[start:end]
+        return train_idx[start:end]
     elif start >= N_train and end <= N_train + N_valid:
-        return v_idx[start - N_train:end - N_train]
-    elif start >= N_train + N_valid and end <= N_train + N_valid + vocab_size:
-        return vocab_idx[start - N_train - N_valid:end - N_train - N_valid]
+        return valid_idx[start - N_train:end - N_train]
     else:
-        raise ValueError(f"T1_block {T1_block} out of range for train+valid+vocab sizes {N_train+N_valid+vocab_size}")
+        raise ValueError(f"Block {block} out of range for train+valid sizes {N_train + N_valid}")
     
-def get_T1_targets(T1_block: Tuple[int, int], t_targets: torch.Tensor, 
-                   N_train: int, N_valid: int, vocab_size: int) -> torch.Tensor:
+def get_tar(block: Tuple[int, int], N_train: int, train_tar: torch.Tensor) -> Optional[torch.Tensor]:
     """
-    根据 T1_block 的起止位置，获取对应的目标标签。
+    根据 block 的起止位置，获取对应的目标标签。
     """
-    start, end = T1_block
+    start, end = block
     if start < 0 or end <= start:
-        raise ValueError(f"Invalid T1_block {T1_block}")
+        raise ValueError(f"Invalid block {block}")
     if end <= N_train:
-        return t_targets[start:end]
+        return train_tar[start:end]
     else:
-        return torch.zeros((end - start,), dtype=torch.long, device='cpu', pin_memory=True) - 1
+        return None
     
     
 def get_T2_type(T2_block: Union[Tuple[int, int], BaseSample], N_train: int, vocab_size: int) -> str:
@@ -1280,7 +1277,6 @@ def get_loss_type(T1_type: str, T2_type: str, loss_strategy: Dict) -> str:
 
 
 def normalized_matmul(A: torch.Tensor, B: torch.Tensor, 
-                      ori_prod: bool = False,
                       eps: float = 1e-12) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     输入:
@@ -1290,7 +1286,7 @@ def normalized_matmul(A: torch.Tensor, B: torch.Tensor,
     流程:
         1) 对 dim = -1 / -2 做 L2 归一化 (keepdim=True)
         2) 进行矩阵乘法
-        3) 返回 (乘积, A 的范数, B 的范数)，范数为最后一维的 L2 范数 (keepdim=True)
+        3) 返回 (乘积, A 的范数 * B 的范数)，范数为最后一维的 L2 范数 (keepdim=True)
     返回:
         prod: torch.Tensor，矩阵乘积，形状为 A[..., m, k] @ B[..., k, n] -> [..., m, n]
         norm: torch.Tensor，形状为 A[..., m, 1] * B[..., 1, n]
@@ -1304,7 +1300,7 @@ def normalized_matmul(A: torch.Tensor, B: torch.Tensor,
     B_normed = B / normB
 
     # 矩阵乘法（针对最后两维），其余维度按批对齐
-    prod = A_normed @ B_normed if not ori_prod else A @ B
+    prod = A_normed @ B_normed
     norm = normA * normB
 
     return prod, norm

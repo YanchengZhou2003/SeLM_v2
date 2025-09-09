@@ -12,9 +12,8 @@ parser.add_argument("--cte_train_bs"   , type=int,   default=1,    help="CTE tra
 parser.add_argument("--cte_train_iters", type=int,   default=1,    help="CTE training iterations")
 parser.add_argument("--cte_eval_bs"    , type=int,   default=32,   help="CTE evaluation batch size")
 parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE evaluation iterations")
-parser.add_argument("--ratio_dyn_prob" , type=float, default=0.95, help="Ratio for dynamic and probability loss") 
-# 256: 0.962, 512: 0.9651
-parser.add_argument("--ratio_dyn_sta"  , type=float, default=0.0,  help="Ratio for dynamic and static loss")
+parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for") 
+parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
 parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
 parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
 parser.add_argument("--sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
@@ -54,20 +53,17 @@ cte_eval_iters    = args.cte_eval_iters  # 1
 cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
 cte_save_interval = 1
 
-T1_block_size     = 2048
+N_T     = 2048
 T2_block_size     = 1024
 
 train_length      = args.train_length  # 512
 
 loss_strategy: Dict = {
-    'dyn_loss'  : 'square', # dyn:  dynamic
-    'sta_loss'  : 'square', # sta:  static
-    'prob_loss' : 'js' ,    # prob: probability
-    'weighted_dyn_prob': True,
-    'weighted_dyn_sta' : True,
-    'converge': 20,
-    'ratio_dyn_prob' : args.ratio_dyn_prob,  
-    'ratio_dyn_sta'  : args.ratio_dyn_sta    
+    'cos_loss'  : 'square', # 
+    'cro_loss'  : 'js', # 
+    'converge'  : 20,
+    'ratio_cos' : args.ratio_cos,  
+    'ratio_cro' : args.ratio_cro    
 }
 epoch_num=10
 
