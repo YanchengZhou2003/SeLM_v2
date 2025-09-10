@@ -10,16 +10,17 @@
       "justMyCode": false,
       "args": [
         "--train_length", "4096",
-        "--ratio_dyn_prob", "1.00",
-        "--truncate_valid", "256",
-        "--sample_factor", "0.4",
+        "--ratio_cos", "0.00",
+        "--ratio_cro", "1.00",
+        "--truncate_valid", "4096",
+        // "--sample_factor", "0.4",
       ],
       "env": {
         // "TRITON_CODEGEN_DEBUG": "1",
         // "TRITON_DUMP_LLVM": "1",
         // "TRITON_DUMP_ASM": "1",
         // "TRITON_INTERPRET": "1",
-        // "CUDA_LAUNCH_BLOCKING": "1"
+        "CUDA_LAUNCH_BLOCKING": "1"
       },
 
     },

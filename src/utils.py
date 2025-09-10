@@ -26,8 +26,6 @@ _cache = {}
 
 from typing import Literal, Mapping, TypedDict, Union
 
-from src.sample import BaseSample
-
 
 # 仅目标 + 收敛
 class PhaseConfigBase(TypedDict):
@@ -1151,10 +1149,17 @@ def get_type(block: Tuple[int, int], N_train: int, N_valid: int) -> str:
 def get_emb(block: Tuple[int, int], 
             N_train  : int,          N_valid  : int,
             train_emb: torch.Tensor, valid_emb: torch.Tensor, 
+            block2indices: Optional[Dict[Tuple[int, int], Tuple[torch.Tensor, str]]]
     ) -> torch.Tensor:
     """
     根据 block 的起止位置，获取对应的嵌入表示。
     """
+    if block2indices is not None:
+        val = block2indices.get(block, None)
+        if val is not None:
+            return train_emb[val[0]] if val[1] == 'train' else valid_emb[val[0]]
+        else:
+            raise ValueError(f"Block {block} not found in block2indices")
     start, end = block
     if start < 0 or end <= start:
         raise ValueError(f"Invalid block {block}")
@@ -1167,11 +1172,19 @@ def get_emb(block: Tuple[int, int],
     
 def get_idx(block: Tuple[int, int], 
             N_train  : int,          N_valid  : int,
-            train_idx: torch.Tensor, valid_idx: torch.Tensor
+            train_idx: torch.Tensor, valid_idx: torch.Tensor,
+            block2indices: Optional[Dict[Tuple[int, int], Tuple[torch.Tensor, str]]]
     ) -> torch.Tensor:
     """
     根据 block 的起止位置，获取对应的索引。
     """
+    if block2indices is not None:
+        val = block2indices.get(block, None)
+        if val is not None:
+            return train_idx[val[0]] if val[1] == 'train' else valid_idx[val[0]]
+        else:
+            raise ValueError(f"Block {block} not found in block2indices")
+    
     start, end = block
     if start < 0 or end <= start:
         raise ValueError(f"Invalid block {block}")
@@ -1182,10 +1195,19 @@ def get_idx(block: Tuple[int, int],
     else:
         raise ValueError(f"Block {block} out of range for train+valid sizes {N_train + N_valid}")
     
-def get_tar(block: Tuple[int, int], N_train: int, train_tar: torch.Tensor) -> Optional[torch.Tensor]:
+def get_tar(block: Tuple[int, int], N_train: int, train_tar: torch.Tensor,
+            block2indices: Optional[Dict[Tuple[int, int], Tuple[torch.Tensor, str]]]
+    ) -> Optional[torch.Tensor]:
     """
     根据 block 的起止位置，获取对应的目标标签。
     """
+    if block2indices is not None:
+        val = block2indices.get(block, None)
+        if val is not None:
+            return train_tar[val[0]] if val[1] == 'train' else None
+        else:
+            raise ValueError(f"Block {block} not found in block2indices")
+    
     start, end = block
     if start < 0 or end <= start:
         raise ValueError(f"Invalid block {block}")
@@ -1195,60 +1217,6 @@ def get_tar(block: Tuple[int, int], N_train: int, train_tar: torch.Tensor) -> Op
         return None
     
     
-def get_T2_type(T2_block: Union[Tuple[int, int], BaseSample], N_train: int, vocab_size: int) -> str:
-    """
-    根据 T2_block 的起止位置，判断其类型：
-      - 'train' : 完全在训练集范围内 [0, N_train)
-      - 'vocab' : 完全在词表范围内 [N_train, N_train + vocab_size)
-    """
-    if isinstance(T2_block, BaseSample):
-        # 如果是 _Sample 类型，直接返回 'cross'
-        return 'train'
-    start, end = T2_block
-    if start < 0 or end <= start:
-        raise ValueError(f"Invalid T2_block {T2_block}")
-    if end <= N_train:
-        return 'train'
-    elif start >= N_train and end <= N_train + vocab_size:
-        return 'vocab'
-    else:
-        raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_size}")
-
-def get_T2_emb(T1_block: Tuple[int, int], T2_block: Union[Tuple[int, int], BaseSample], t_eu_emb: torch.Tensor, vocab_emb: torch.Tensor, 
-               N_train: int, vocab_size: int) -> torch.Tensor:
-    """
-    根据 T2_block 的起止位置，获取对应的嵌入表示。
-    """
-    if isinstance(T2_block, BaseSample):
-        return t_eu_emb[T2_block[T1_block]] # T2_block[T1_block] 会得到一个 (T1_block_size, c) 的张量，那么，返回张量的大小为 (T1_block_size, c, dim)
-        
-    
-    start, end = T2_block
-    if start < 0 or end <= start:
-        raise ValueError(f"Invalid T2_block {T2_block}")
-    if end <= N_train:
-        return t_eu_emb[start:end]
-    elif start >= N_train and end <= N_train + vocab_emb.size(0):
-        return vocab_emb[start - N_train:end - N_train]
-    else:
-        raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_emb.size(0)}")
-    
-def get_T2_idx(T1_block: Tuple[int, int], T2_block: Union[Tuple[int, int], BaseSample], t_idx: torch.Tensor, vocab_idx: torch.Tensor, 
-               N_train: int, vocab_size: int) -> torch.Tensor:
-    """
-    根据 T2_block 的起止位置，获取对应的索引。
-    """
-    if isinstance(T2_block, BaseSample):
-        return t_idx[T2_block[T1_block]] # T2_block[T1_block] 会得到一个 (T1_block_size, c) 的张量，那么，返回张量的大小为 (T1_block_size, c)
-    start, end = T2_block
-    if start < 0 or end <= start:
-        raise ValueError(f"Invalid T2_block {T2_block}")
-    if end <= N_train:
-        return t_idx[start:end]
-    elif start >= N_train and end <= N_train + vocab_size:
-        return vocab_idx[start - N_train:end - N_train]
-    else:
-        raise ValueError(f"T2_block {T2_block} out of range for train+vocab sizes {N_train+vocab_size}")
     
 def get_loss_type(T1_type: str, T2_type: str, loss_strategy: Dict) -> str:
     """
@@ -1335,3 +1303,15 @@ def mask_fill_scalar_expand(mask: torch.Tensor,
     mask_expanded = mask.view(N, *([1] * (dim - 1)))
     out = torch.where(mask_expanded, out, torch.as_tensor(false_value, device=mask.device))
     return out
+
+
+def gather_idx_and_emb(train_idx: torch.Tensor, train_emb: torch.Tensor, idx2d: torch.Tensor):
+    # idx2d: (T, S), long, device 与 train_* 一致
+    T, S = idx2d.shape
+    flat = idx2d.reshape(-1)                       # (T*S,)
+    pos_idx = train_idx.index_select(0, flat)      # (T*S,)
+    pos_idx = pos_idx.view(T, S)
+
+    flat_emb = train_emb.index_select(0, flat)     # (T*S, dim)
+    pos_emb = flat_emb.view(T, S, train_emb.size(1))
+    return pos_idx, pos_emb

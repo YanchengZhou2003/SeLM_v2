@@ -1,0 +1,92 @@
+数据集总长度：1115394
+Before CTE Training: train eu loss: 1.4844475984573364, eval eu loss: 1.659071922302246
+Before CTE Training: train eu acc: 0.6149797439575195, eval eu acc: 0.554443359375
+epoch   0 summary: train_cos_loss : 0.0427, train_cro_loss : 0.5599, train_tot_loss : 0.0463, valid_cos_loss : 0.0414, train loss: 3.7613, accuracy: 0.2056, valid loss: 4.4052, accuracy: 0.0488, 
+epoch   1 summary: train_cos_loss : 0.0393, train_cro_loss : 0.5160, train_tot_loss : 0.0427, valid_cos_loss : 0.0389, train loss: 2.8918, accuracy: 0.3176, valid loss: 3.5781, accuracy: 0.1617, 
+epoch   2 summary: train_cos_loss : 0.0307, train_cro_loss : 0.3983, train_tot_loss : 0.0332, valid_cos_loss : 0.0292, train loss: 2.8819, accuracy: 0.3887, valid loss: 3.6123, accuracy: 0.2019, 
+epoch   3 summary: train_cos_loss : 0.0252, train_cro_loss : 0.3902, train_tot_loss : 0.0278, valid_cos_loss : 0.0243, train loss: 2.9478, accuracy: 0.3309, valid loss: 3.6804, accuracy: 0.2090, 
+epoch   4 summary: train_cos_loss : 0.0227, train_cro_loss : 0.3899, train_tot_loss : 0.0253, valid_cos_loss : 0.0219, train loss: 3.2918, accuracy: 0.3893, valid loss: 3.9238, accuracy: 0.2382, 
+epoch   5 summary: train_cos_loss : 0.0217, train_cro_loss : 0.3919, train_tot_loss : 0.0243, valid_cos_loss : 0.0220, train loss: 3.0592, accuracy: 0.3980, valid loss: 3.7161, accuracy: 0.2328, 
+epoch   6 summary: train_cos_loss : 0.0207, train_cro_loss : 0.3885, train_tot_loss : 0.0232, valid_cos_loss : 0.0205, train loss: 2.8922, accuracy: 0.3898, valid loss: 3.5615, accuracy: 0.2325, 
+epoch   7 summary: train_cos_loss : 0.0201, train_cro_loss : 0.3783, train_tot_loss : 0.0226, valid_cos_loss : 0.0198, train loss: 3.2778, accuracy: 0.3841, valid loss: 3.8810, accuracy: 0.2318, 
+epoch   8 summary: train_cos_loss : 0.0199, train_cro_loss : 0.3968, train_tot_loss : 0.0226, valid_cos_loss : 0.0196, train loss: 3.6071, accuracy: 0.3036, valid loss: 4.0435, accuracy: 0.1923, 
+epoch   9 summary: train_cos_loss : 0.0194, train_cro_loss : 0.4286, train_tot_loss : 0.0223, valid_cos_loss : 0.0195, train loss: 2.9362, accuracy: 0.3552, valid loss: 3.4717, accuracy: 0.2246, 
+epoch  10 summary: train_cos_loss : 0.0192, train_cro_loss : 0.3976, train_tot_loss : 0.0218, valid_cos_loss : 0.0193, train loss: 2.7286, accuracy: 0.4219, valid loss: 3.3903, accuracy: 0.2559, 
+epoch  11 summary: train_cos_loss : 0.0189, train_cro_loss : 0.3758, train_tot_loss : 0.0214, valid_cos_loss : 0.0186, train loss: 3.1271, accuracy: 0.3518, valid loss: 3.7118, accuracy: 0.2213, 
+epoch  12 summary: train_cos_loss : 0.0187, train_cro_loss : 0.4087, train_tot_loss : 0.0214, valid_cos_loss : 0.0190, train loss: 2.7396, accuracy: 0.3866, valid loss: 3.3956, accuracy: 0.2418, 
+epoch  13 summary: train_cos_loss : 0.0183, train_cro_loss : 0.3911, train_tot_loss : 0.0209, valid_cos_loss : 0.0180, train loss: 3.0467, accuracy: 0.4137, valid loss: 3.8599, accuracy: 0.2377, 
+epoch  14 summary: train_cos_loss : 0.0178, train_cro_loss : 0.3857, train_tot_loss : 0.0204, valid_cos_loss : 0.0173, train loss: 3.0449, accuracy: 0.3666, valid loss: 3.7303, accuracy: 0.2118, 
+epoch  15 summary: train_cos_loss : 0.0178, train_cro_loss : 0.3972, train_tot_loss : 0.0204, valid_cos_loss : 0.0181, train loss: 2.5474, accuracy: 0.3966, valid loss: 3.2756, accuracy: 0.2324, 
+epoch  16 summary: train_cos_loss : 0.0173, train_cro_loss : 0.3654, train_tot_loss : 0.0198, valid_cos_loss : 0.0176, train loss: 2.8489, accuracy: 0.4107, valid loss: 3.5267, accuracy: 0.2345, 
+epoch  17 summary: train_cos_loss : 0.0171, train_cro_loss : 0.3788, train_tot_loss : 0.0196, valid_cos_loss : 0.0173, train loss: 2.6315, accuracy: 0.4529, valid loss: 3.3620, accuracy: 0.2566, 
+epoch  18 summary: train_cos_loss : 0.0168, train_cro_loss : 0.3560, train_tot_loss : 0.0191, valid_cos_loss : 0.0166, train loss: 2.5384, accuracy: 0.4520, valid loss: 3.3044, accuracy: 0.2628, 
+epoch  19 summary: train_cos_loss : 0.0168, train_cro_loss : 0.3580, train_tot_loss : 0.0191, valid_cos_loss : 0.0167, train loss: 2.6365, accuracy: 0.3937, valid loss: 3.3663, accuracy: 0.2257, 
+epoch  20 summary: train_cos_loss : 0.0167, train_cro_loss : 0.3789, train_tot_loss : 0.0193, valid_cos_loss : 0.0171, train loss: 3.0400, accuracy: 0.3323, valid loss: 3.6349, accuracy: 0.1808, 
+epoch  21 summary: train_cos_loss : 0.0167, train_cro_loss : 0.4299, train_tot_loss : 0.0195, valid_cos_loss : 0.0165, train loss: 2.8393, accuracy: 0.4037, valid loss: 3.4649, accuracy: 0.2313, 
+epoch  22 summary: train_cos_loss : 0.0168, train_cro_loss : 0.4010, train_tot_loss : 0.0195, valid_cos_loss : 0.0166, train loss: 3.2480, accuracy: 0.2797, valid loss: 3.8912, accuracy: 0.1415, 
+epoch  23 summary: train_cos_loss : 0.0170, train_cro_loss : 0.4419, train_tot_loss : 0.0200, valid_cos_loss : 0.0167, train loss: 2.7142, accuracy: 0.3677, valid loss: 3.3518, accuracy: 0.2152, 
+epoch  24 summary: train_cos_loss : 0.0169, train_cro_loss : 0.3929, train_tot_loss : 0.0195, valid_cos_loss : 0.0172, train loss: 2.7265, accuracy: 0.4319, valid loss: 3.4115, accuracy: 0.2513, 
+epoch  25 summary: train_cos_loss : 0.0193, train_cro_loss : 0.3487, train_tot_loss : 0.0216, valid_cos_loss : 0.0193, train loss: 1.8999, accuracy: 0.5296, valid loss: 2.7333, accuracy: 0.3090, 
+epoch  26 summary: train_cos_loss : 0.0126, train_cro_loss : 0.2808, train_tot_loss : 0.0145, valid_cos_loss : 0.0123, train loss: 1.7684, accuracy: 0.6115, valid loss: 2.7557, accuracy: 0.3413, 
+epoch  27 summary: train_cos_loss : 0.0106, train_cro_loss : 0.2661, train_tot_loss : 0.0124, valid_cos_loss : 0.0103, train loss: 1.5800, accuracy: 0.6515, valid loss: 2.6825, accuracy: 0.3730, 
+epoch  28 summary: train_cos_loss : 0.0100, train_cro_loss : 0.2392, train_tot_loss : 0.0116, valid_cos_loss : 0.0097, train loss: 1.4878, accuracy: 0.6708, valid loss: 2.7037, accuracy: 0.3728, 
+epoch  29 summary: train_cos_loss : 0.0098, train_cro_loss : 0.2289, train_tot_loss : 0.0113, valid_cos_loss : 0.0094, train loss: 1.4226, accuracy: 0.6999, valid loss: 2.7057, accuracy: 0.3828, 
+epoch  30 summary: train_cos_loss : 0.0097, train_cro_loss : 0.2144, train_tot_loss : 0.0112, valid_cos_loss : 0.0096, train loss: 1.3934, accuracy: 0.7001, valid loss: 2.6549, accuracy: 0.3795, 
+epoch  31 summary: train_cos_loss : 0.0097, train_cro_loss : 0.2147, train_tot_loss : 0.0111, valid_cos_loss : 0.0094, train loss: 1.3822, accuracy: 0.7053, valid loss: 2.6485, accuracy: 0.3872, 
+epoch  32 summary: train_cos_loss : 0.0096, train_cro_loss : 0.2084, train_tot_loss : 0.0110, valid_cos_loss : 0.0093, train loss: 1.3317, accuracy: 0.7128, valid loss: 2.6030, accuracy: 0.3972, 
+epoch  33 summary: train_cos_loss : 0.0096, train_cro_loss : 0.2046, train_tot_loss : 0.0110, valid_cos_loss : 0.0093, train loss: 1.3373, accuracy: 0.7036, valid loss: 2.5708, accuracy: 0.3973, 
+epoch  34 summary: train_cos_loss : 0.0096, train_cro_loss : 0.2011, train_tot_loss : 0.0110, valid_cos_loss : 0.0093, train loss: 1.3738, accuracy: 0.6953, valid loss: 2.6154, accuracy: 0.3958, 
+epoch  35 summary: train_cos_loss : 0.0096, train_cro_loss : 0.2091, train_tot_loss : 0.0110, valid_cos_loss : 0.0095, train loss: 1.2945, accuracy: 0.7237, valid loss: 2.5599, accuracy: 0.3943, 
+epoch  36 summary: train_cos_loss : 0.0096, train_cro_loss : 0.1959, train_tot_loss : 0.0109, valid_cos_loss : 0.0093, train loss: 1.3278, accuracy: 0.7189, valid loss: 2.6028, accuracy: 0.4052, 
+epoch  37 summary: train_cos_loss : 0.0096, train_cro_loss : 0.2023, train_tot_loss : 0.0109, valid_cos_loss : 0.0092, train loss: 1.2643, accuracy: 0.7341, valid loss: 2.5907, accuracy: 0.4005, 
+epoch  38 summary: train_cos_loss : 0.0096, train_cro_loss : 0.1922, train_tot_loss : 0.0109, valid_cos_loss : 0.0092, train loss: 1.2611, accuracy: 0.7307, valid loss: 2.6053, accuracy: 0.4053, 
+epoch  39 summary: train_cos_loss : 0.0096, train_cro_loss : 0.1947, train_tot_loss : 0.0109, valid_cos_loss : 0.0092, train loss: 1.2558, accuracy: 0.7374, valid loss: 2.5721, accuracy: 0.4078, 
+epoch  40 summary: train_cos_loss : 0.0098, train_cro_loss : 0.1916, train_tot_loss : 0.0110, valid_cos_loss : 0.0094, train loss: 1.2867, accuracy: 0.7216, valid loss: 2.5779, accuracy: 0.3961, 
+epoch  41 summary: train_cos_loss : 0.0096, train_cro_loss : 0.2001, train_tot_loss : 0.0110, valid_cos_loss : 0.0093, train loss: 1.2614, accuracy: 0.7325, valid loss: 2.5637, accuracy: 0.4011, 
+epoch  42 summary: train_cos_loss : 0.0096, train_cro_loss : 0.1935, train_tot_loss : 0.0109, valid_cos_loss : 0.0092, train loss: 1.1876, accuracy: 0.7418, valid loss: 2.5937, accuracy: 0.4019, 
+epoch  43 summary: train_cos_loss : 0.0095, train_cro_loss : 0.1853, train_tot_loss : 0.0107, valid_cos_loss : 0.0091, train loss: 1.1896, accuracy: 0.7448, valid loss: 2.5805, accuracy: 0.4109, 
+epoch  44 summary: train_cos_loss : 0.0094, train_cro_loss : 0.1830, train_tot_loss : 0.0106, valid_cos_loss : 0.0090, train loss: 1.1674, accuracy: 0.7507, valid loss: 2.5732, accuracy: 0.4117, 
+epoch  45 summary: train_cos_loss : 0.0094, train_cro_loss : 0.1808, train_tot_loss : 0.0106, valid_cos_loss : 0.0092, train loss: 1.1739, accuracy: 0.7497, valid loss: 2.5419, accuracy: 0.4081, 
+epoch  46 summary: train_cos_loss : 0.0094, train_cro_loss : 0.1806, train_tot_loss : 0.0106, valid_cos_loss : 0.0091, train loss: 1.1571, accuracy: 0.7534, valid loss: 2.5631, accuracy: 0.4110, 
+epoch  47 summary: train_cos_loss : 0.0094, train_cro_loss : 0.1788, train_tot_loss : 0.0106, valid_cos_loss : 0.0090, train loss: 1.1602, accuracy: 0.7524, valid loss: 2.5719, accuracy: 0.4108, 
+epoch  48 summary: train_cos_loss : 0.0094, train_cro_loss : 0.1786, train_tot_loss : 0.0105, valid_cos_loss : 0.0090, train loss: 1.1519, accuracy: 0.7554, valid loss: 2.5788, accuracy: 0.4119, 
+epoch  49 summary: train_cos_loss : 0.0094, train_cro_loss : 0.1779, train_tot_loss : 0.0105, valid_cos_loss : 0.0090, train loss: 1.1529, accuracy: 0.7539, valid loss: 2.5751, accuracy: 0.4115, 
+all                       10254438.533ms
+all_epoch                 10023663.064ms
+all_preparation             230775.411ms
+all_preparation_1                0.031ms
+all_preparation_2           230521.806ms
+all_preparation_3              253.519ms
+block                          193.443ms
+block_calc                     113.660ms
+block_preparation               79.769ms
+block_preparation_3.1.0             5.613ms
+block_preparation_3.1.1             6.687ms
+block_preparation_3.1.2             1.468ms
+block_preparation_3.1.4            65.972ms
+epoch                       200387.855ms
+epoch_preparation               43.397ms
+epoch_train                 199638.231ms
+epoch_update                     2.147ms
+epoch_valid                    703.984ms
+----------------------------------------
+all                       10254438.533ms
+  all_epoch             97.75%
+  all_preparation        2.25%
+all_preparation             230775.411ms
+  all_preparation_2     99.89%
+  all_preparation_3      0.11%
+  all_preparation_1      0.00%
+block                      9981651.191ms
+  block_calc            58.76%
+  block_preparation     41.24%
+block_preparation          4116066.645ms
+  block_preparation_3.1.4    82.70%
+  block_preparation_3.1.1     8.38%
+  block_preparation_3.1.0     7.04%
+  block_preparation_3.1.2     1.84%
+epoch                     10019392.765ms
+  epoch_train           99.63%
+  epoch_valid            0.35%
+  epoch_preparation      0.02%
+  epoch_update           0.00%

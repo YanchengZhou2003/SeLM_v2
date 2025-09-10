@@ -248,7 +248,7 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     
     print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
     save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
-    save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
+    # save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
 
 ################ ------------- 训练 CTE ------------- ################
 
@@ -272,7 +272,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     ### step 2: 取出数据
     gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu') # (N_vocab, n_embd), not pinned
     sta_emb     = gpt_weights['token_embedding_table.weight']                      # (N_valid, n_embd), not pinned
-    train_emb   = torch.cat((train_cache['emb'][train_length - vocab_size], sta_emb.pin_memory()), dim=0)  
+    train_emb   = torch.cat((train_cache['emb'][:train_length - vocab_size], sta_emb.pin_memory()), dim=0)  
                                                                                    # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
     valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory

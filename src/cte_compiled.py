@@ -5,16 +5,17 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import torch
-# torch.set_float32_matmul_precision('high')
+
+torch.set_float32_matmul_precision('high')
 import torch.nn.functional as F
 from matplotlib.colors import PowerNorm
 from torch.nn import functional as F
 from tqdm import tqdm
 
 from src.gettime import gettime, mark
-# from src.loom_kernel import triton_loom_wrapper
+from src.loom_kernel import _loom_fused_no_branch  # triton_loom_wrapper
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import ED, N_T, ST, instant_writeback, vocab_size
+from src.para import ED, N_T, ST, vocab_size
 from src.sample import BaseSample, Expander_Sample
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -58,6 +59,7 @@ class CritiGraph(torch.nn.Module):
         
         self._valid_mask_cache = {}
 
+    @torch.compile()
     def distance(self, coord1: torch.Tensor, coord2: torch.Tensor, norm: torch.Tensor):
         sg = (((coord1 >= 0).to(torch.int16) << 1) - 1) * (((coord2 >= 0).to(torch.int16) << 1) - 1)
         xor_result = torch.abs(coord1) ^ torch.abs(coord2)
@@ -147,109 +149,65 @@ class CritiGraph(torch.nn.Module):
 
 
     
-    @torch.no_grad()
     def loom(self, 
-             pos_idx  : torch.Tensor, # (T, S, )
-             pos_emb  : torch.Tensor, # (T, S, dim)
-             cur_type : str,
-             _loss_cos: torch.Tensor, # (T, C, D)
-             _loss_cro: torch.Tensor, # (T, C, D)
-             _loss_tot: torch.Tensor, # (T, C, D)
+         pos_idx  : torch.Tensor, # (T, S_)
+         pos_emb  : torch.Tensor, # (T, S_, dim)
+         cur_type : str,
+         _loss_cos: torch.Tensor, # (T, C, D)
+         _loss_cro: torch.Tensor, # (T, C, D)
+         _loss_tot: torch.Tensor  # (T, C, D)
     ):
-            
-        ### step 1: 获取基本信息
-        T, S = pos_idx.size()
+        # --- 基本信息 ---
+        T, S_ = pos_idx.size()
         C, D = 2 * self.k * self.h + 1, self.tp
-        
-        ### step 2: 开始计算
+
+        # 说明：推理阶段只需把 self.masks[i] 中不参与的列置 0；不需要 S_ 与任何拼接
+        # mask/lth 由外部预先准备好，形状：
+        #   masks[i] : (subT, S_)
+        #   lth[i]   : (subT,)
+
         for i, (dev, stream, split) in enumerate(zip(self.devices, self.streams, self.sub_splits)):
-            ### step 2.1: 基本数据
             Tl, Tr = split.start, split.stop
             subT = Tr - Tl
-            dev_num = i
-            
-            ### step 2.2: 多 GPU 处理
-            with torch.cuda.device(dev), torch.cuda.stream(stream): # type: ignore
-                ### step 2.2.1: 数据传输开始 ###        
+            if subT <= 0:
+                continue
+
+            with torch.cuda.device(dev), torch.cuda.stream(stream):  # 仅调度/搬运
+                # --- 切片搬运 ---
                 sub_pos_idx, sub_pos_emb = to_dev(
-                    pos_idx, pos_emb, 
-                    device=dev, 
-                    s=Tl, e=Tr,
-                    dim=0
+                    pos_idx, pos_emb,
+                    device=dev, s=Tl, e=Tr, dim=0
+                )                                         # (subT, S), (subT, S, dim)
+
+                # --- 位置张量 ---
+                pos_loc = self.locations[i][sub_pos_idx]  # (subT, S, D)
+                sta_emb = self.sta_emb[i]                 # (subT, dim)
+                sta_loc = self.sta_loc[i]                 # (subT, D)
+                cnc_loc = self.cnc_loc[i]                 # (subT, C, D)
+                targets = self.targets[i] if self.targets[i] is not None else torch.ones((subT, vocab_size), dtype=torch.float32, device=dev) # (subT, N_sta)
+
+                # --- mask/lth（推理阶段自行在外层把不参与列置 0） ---
+                mask = self.masks[i]                      # (subT, S), bool
+                lth  = self.lth[i]                        # (subT,)
+
+                # --- 编译核：计算两路 loss ---
+                # print(sub_pos_emb.shape, sta_emb.shape, sta_loc.shape, pos_loc.shape, cnc_loc.shape, targets.shape, mask.shape, lth.shape, S_ - vocab_size, S_)
+                loss_cos, loss_cro = _loom_fused_no_branch(
+                    sub_pos_emb, sta_emb, sta_loc, pos_loc, cnc_loc, targets,
+                    mask, lth,
+                    S_ - vocab_size, S_,
+                    h=self.h, tp=self.tp, sum_dim=1
                 )
-                ### step 2.2.1: 数据传输结束 ###
-                 
-                
-                ### step 2.2.2: 计算开始 ###
-                ### step 2.2.2 (a): 获取基本信息，拼接张量
-                if cur_type == "train":
-                    sub_pos_idx = torch.cat([
-                        sub_pos_idx, self.voc_idx[i].unsqueeze(0).expand(subT, -1)
-                    ], dim=1) # (subT, S + N_sta)
-                    sub_pos_emb = torch.cat([
-                        sub_pos_emb, self.voc_emb[i].unsqueeze(0).expand(subT, -1, -1)
-                    ], dim=1) # (subT, S + N_sta, dim)
-                    # 称 S_ = S + N_sta 或者 S
-                S_ = sub_pos_idx.size(1)
-                mask, lth = self.masks[i], self.lth[i] 
-                              # (subT, S_), (subT)
-                
+                # --- 线性组合 ---
+                loss_tot = (self.loss_strategy['ratio_cos'] * loss_cos +
+                            self.loss_strategy['ratio_cro'] * loss_cro)   # (subT, C, D)
 
-                ### step 2.2.2 (b): 计算欧式空间的值
-                sta_emb = self.sta_emb[i]        # (subT, dim)
-                eu_val, eu_norm = normalized_matmul(
-                    sta_emb[:, None, :],         # (subT, 1, dim )
-                    sub_pos_emb.transpose(1, 2), # (subT, dim, S_)
-                ) 
-                eu_val, eu_norm  = eu_val.squeeze(1), eu_norm.squeeze(1)
-                                                 # (subT, 1, dim) @ (subT, dim, S_) -> (subT, 1, S_) -> (subT, S_) 
-                eu_val [:, S:S_] = self.targets[i] if self.targets[i] is not None else 0
-                                                 # (subT, S:S_), 的部分放为 groundtruth, (subT, 0:S) 的部分维持
-                eu_norm[:, S:S_] = torch.ones_like(eu_norm[:, S:S_]) * 20 if self.targets[i] is not None else 0
-                                                 # (subT, S:S_), 的部分设为 20，因为 GPT 那里就是这么算的
-                eu_norm[:, 0:S]  = torch.ones_like(eu_norm[:, 0:S ]) 
-                                                 # (subT, 0:S ), 的部分设为 1
-
-                
-                
-                #### step 2.2.2 (c): 计算 CT 空间的值
-                #### step 2.2.2 (c1): 获取起点、候选位置
-                sta_loc = self.sta_loc[i]                # (subT, D)
-                pos_loc = self.locations[i][sub_pos_idx] # (subT, S_, D)
-                cnc_loc = self.cnc_loc[i]                # (subT, C , D)
-                
-                #### step 2.2.2 (c2): 计算距离
-                cos_sta_pos     = self.distance(
-                    sta_loc[:, None, :]   , pos_loc[:, :, :]     , eu_norm[..., None]      
-                )                                        # (subT, S_, D)
-                cos_sta_pos_sum = cos_sta_pos.sum(dim=-1) 
-                                                         # (subT, S_)
-                cos_cnc_pos     = self.distance(
-                    cnc_loc[:, None, :, :], pos_loc[:, :, None,:], eu_norm[..., None, None]
-                )                                        # (subT, S_, C, D)
-                ct_val          = (
-                    cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
-                ) / self.tp                              # (subT, S_, C, D)
-                # 对于 subT 个 starting point，向 S_ 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
-                
-                #### step 2.2.2 (c3): 计算 loss
-                ct_val    = ct_val                                         # (subT, S_, C, D)
-                eu_val    = eu_val[..., None, None].expand(ct_val.shape)   # (subT, S_, C, D)
-
-                loss_cos, loss_cro, loss_tot = self.calc_loss(
-                    ct_val, eu_val, 
-                    mask[..., None, None], lth,
-                    S, S_
-                )                                                          # (subT, C, tp)           
-                ### 计算：计算结束 ###
-                
-                ### 通信2：数据传输开始 ###
+                # --- 回写（非阻塞）---
                 _loss_cos[Tl:Tr].copy_(loss_cos, non_blocking=True)
                 _loss_cro[Tl:Tr].copy_(loss_cro, non_blocking=True)
                 _loss_tot[Tl:Tr].copy_(loss_tot, non_blocking=True)
-                ### 通信2：数据传输结束 ###
-        
-        for i, stream in enumerate(self.streams):
+
+        for stream in self.streams:
             stream.synchronize()
         
 
@@ -282,7 +240,7 @@ class CritiGraph(torch.nn.Module):
         N_dyn  , N_sta   = N_train - vocab_size, vocab_size
         dyn_slice        = slice(0, N_dyn)
         sta_slice        = slice(N_dyn, N_train)
-        assert N_train % N_T == 0 and N_valid % N_T == 0, f"N_train 和 N_valid 必须是 N_T 的整数倍，但现在是 {N_train}, {N_valid}, {N_T}"
+        assert N_train % N_T == 0 and N_valid % N_T == 0, "N_train 和 N_valid 必须是 N_T 的整数倍"
         mark(ED, "all_preparation_1", father="all_preparation")
         
         mark(ST, "all_preparation_2")
@@ -303,8 +261,8 @@ class CritiGraph(torch.nn.Module):
         
         mark(ST, "all_preparation_3")
         ### step 3: 固定全局不变信息
-        self.voc_emb = [train_emb[sta_slice].to(dev, non_blocking=True) for dev in self.devices] # (N_sta, dim)
-        self.voc_idx = [train_idx[sta_slice].to(dev, non_blocking=True) for dev in self.devices] # (N_sta, )
+        voc_emb = train_emb[sta_slice] # (N_sta, dim)
+        voc_idx = train_idx[sta_slice] # (N_sta, )
         _loss_cos = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
         _loss_cro = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
         _loss_tot = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
@@ -330,15 +288,11 @@ class CritiGraph(torch.nn.Module):
                 "valid_tot_loss" :  0.,
             }
             
-            block2indices = None
+            if epoch % 20 == 0:
+                sampler.reset_indices("train")
+            if epoch % 5  == 0:
+                sampler.reset_indices("valid")
             
-            
-            if epoch % 5 == 0:
-                sampler.reset_indices("train", block2indices)
-            if epoch % 2 == 0:
-                sampler.reset_indices("valid", block2indices)
-            
-
             mark(ED, "epoch_preparation", father="epoch")
             mark(ST, "epoch_train")
             ### step 3.1: 训练
@@ -358,10 +312,10 @@ class CritiGraph(torch.nn.Module):
                 self.sub_splits = sub_splits
                 zip_s_d     = list(zip(sub_splits, self.devices))
                 
-                cur_type   = get_type (block, N_train, N_valid                      )  # 'train' / 'vocab' / 'valid'
-                sta_emb    = get_emb  (block, N_train, N_valid, train_emb, valid_emb, block2indices)  # (N_T, dim)
-                sta_idx    = get_idx  (block, N_train, N_valid, train_idx, valid_idx, block2indices)  # (N_T, )
-                targets    = get_tar  (block, N_train         , train_tar           , block2indices)  # (N_T, )  
+                cur_type   = get_type (block, N_train, N_valid)  # 'train' / 'vocab' / 'valid'
+                sta_emb    = get_emb  (block, N_train, N_valid, train_emb, valid_emb)  # (N_T, dim)
+                sta_idx    = get_idx  (block, N_train, N_valid, train_idx, valid_idx)  # (N_T, )
+                targets    = get_tar  (block, N_train         , train_tar,          )  # (N_T, )  
                 targets    = F.one_hot(targets, num_classes=N_sta) * 1e2 if targets is not None else None     
                                                                                        # (N_T, N_sta), 可能为 None    
                 mark(ED, "block_preparation_3.1.0", father="block_preparation")
@@ -374,7 +328,7 @@ class CritiGraph(torch.nn.Module):
                 self      .generate_mask(
                     block,
                     sampler.S,
-                    sampler.S + (N_sta if cur_type == "train" else 0),
+                    sampler.S + N_sta,
                     N_dyn
                 )                # 生成 mask
                 mark(ED, "block_preparation_3.1.1", father="block_preparation")
@@ -392,8 +346,10 @@ class CritiGraph(torch.nn.Module):
                 ### step 3.1.4: 获取 pos 信息
                 sample  = sampler[block]
                 pos_idx = train_idx[sample] # (T, S, )
-                pos_emb = train_emb[pos_idx] # (T, S, dim)
-                # pos_idx, pos_emb = gather_idx_and_emb(train_idx, train_emb, sampler[block])
+                pos_emb = train_emb[sample] # (T, S, dim)
+                pos_idx = torch.cat([pos_idx, voc_idx.unsqueeze(0).expand(N_T, -1)], dim=1)     # (T, S + N_sta)
+                pos_emb = torch.cat([pos_emb, voc_emb.unsqueeze(0).expand(N_T, -1, -1)], dim=1) # (T, S + N_sta, dim)
+                S_      = pos_idx.size(1)
                 
                 mark(ED, "block_preparation_3.1.4", father="block_preparation")
                 
@@ -406,25 +362,13 @@ class CritiGraph(torch.nn.Module):
                 selected_locs, real_loss_cos, real_loss_cro, real_loss_tot = self._get_best_loc(
                     cnc_loc,
                     _loss_cos, _loss_cro, _loss_tot, 
+
                 ) # (T), (T), (T), (T)
-                if not instant_writeback:
-                    new_locations.index_copy_(
-                        0,
-                        sta_idx,
-                        selected_locs.view(-1, self.tp)
-                    )
-                else:
-                    self.main_locations.index_copy_(
-                        0,
-                        sta_idx,
-                        selected_locs.view(-1, self.tp)
-                    )
-                    for i, dev in enumerate(self.devices):
-                        self.locations[i].index_copy_(
-                            0,
-                            sta_idx.to(dev, non_blocking=True),
-                            selected_locs.to(dev, non_blocking=True).view(-1, self.tp)
-                        )
+                new_locations.index_copy_(
+                    0,
+                    sta_idx,
+                    selected_locs.view(-1, self.tp)
+                )
                 loss_split_record[f"{cur_type}_cos_loss"] += float(real_loss_cos.sum().item())
                 loss_split_record[f"{cur_type}_cro_loss"] += float(real_loss_cro.sum().item())
                 loss_split_record[f"{cur_type}_tot_loss"] += float(real_loss_tot.sum().item())
@@ -434,12 +378,11 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch_train", father="epoch")
             
             ### step 3.2: 更新
-            if not instant_writeback:
-                mark(ST, "epoch_update")
-                self.main_locations.copy_(new_locations, non_blocking=True)
-                for i, dev in enumerate(self.devices):
-                    self.locations[i].copy_(self.main_locations.to(dev, non_blocking=True), non_blocking=True)
-                mark(ED, "epoch_update", father="epoch")
+            mark(ST, "epoch_update")
+            self.main_locations.copy_(new_locations, non_blocking=True)
+            for i, dev in enumerate(self.devices):
+                self.locations[i].copy_(self.main_locations.to(dev, non_blocking=True), non_blocking=True)
+            mark(ED, "epoch_update", father="epoch")
 
 
             ### step 3.3: 记录与打印
@@ -500,7 +443,7 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch")
             
             ### step 3.5: 可视化。仅可视化前 256 个
-            if (epoch) % 10 == 0 or epoch == self.epoch_num - 1:
+            if epoch % 10 == 0 or epoch == self.epoch_num - 1:
                 train_eu_emb = train_emb[:256]                    # (256, dim)
                 valid_eu_emb = valid_emb[:256]                    # (256, dim)
                 S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()

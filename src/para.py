@@ -16,7 +16,12 @@ parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for")
 parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
 parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
 parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
-parser.add_argument("--sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
+parser.add_argument("--sample_factor" ,  type=float, default=0.4 , help="Sample factor for Base_Sample")
+parser.add_argument("--h" ,  type=int, default=27 , help="")
+parser.add_argument("--tp" ,  type=int, default=2 , help="")
+parser.add_argument("--instant_writeback" ,  type=int, default=0 , help="")
+parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
+
 args = parser.parse_args()
 
 # hyperparameters
@@ -34,14 +39,14 @@ n_layer           = 6
 dropout           = 0.2
 
 
-h                 = 27
-tp                = 2
+h                 = args.h
+tp                = args.tp
 factor            = 1 
 sample_factor     = args.sample_factor  # 1.0
 eps               = 1e-5 
 division_fact     = 1
 sample_k          = 1
-
+instant_writeback = args.instant_writeback  # 2
 
 ### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
 ### 最少：1 * 10 * 256 = 2,560, 最多：64 * 10 * 256 = 163,840
@@ -53,19 +58,18 @@ cte_eval_iters    = args.cte_eval_iters  # 1
 cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
 cte_save_interval = 1
 
-N_T     = 2048
-T2_block_size     = 1024
+N_T               = args.N_T
 
 train_length      = args.train_length  # 512
 
 loss_strategy: Dict = {
-    'cos_loss'  : 'square', # 
+    'cos_loss'  : 'abs', # 
     'cro_loss'  : 'js', # 
-    'converge'  : 20,
+    'converge'  : 5,
     'ratio_cos' : args.ratio_cos,  
     'ratio_cro' : args.ratio_cro    
 }
-epoch_num=10
+epoch_num=25
 
 
 
@@ -172,7 +176,7 @@ gpt_path = './ckpt/gpt'
 cte_path = './ckpt/cte'
 cache_path = './data/'
 train_cache_path = './ckpt/cte'
-vis_path = f'./vis/sample_b_{train_length}_sf{sample_factor}'
+vis_path = f'./vis2/tmp'
 os.makedirs(vis_path, exist_ok=True)
 
 

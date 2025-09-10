@@ -4,7 +4,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union, Dict
 
 import matplotlib.pyplot as plt
 import torch
@@ -158,55 +158,51 @@ class BaseSample(ABC):
 #         return self._cnc_cache[key]
 
 
+import igraph as ig
 import networkx as nx
 
 
 class Expander_Sample(BaseSample):
-    def __init__(self, N_train: int, N_valid: int, c: int):
+    def __init__(self, N_train: int, N_valid: int, 
+                 splits: List[Tuple[int, int]], train_idx: torch.Tensor, valid_idx: torch.Tensor,
+                 S: int):
         """
         基于 d-正则随机图生成 Expander Graph.
         
         """
         super().__init__()
-        assert c < N_train, "度 c 必须小于节点总数 n"
-        if c & 1 != 0:
-            c = c + 1  # 如果 c 是奇数，增加到下一个偶数
-        self.N_train = N_train
-        self.N_valid = N_valid
-        self.S = c
-        self.connections = None
-        self.N_indices = None
-        self.valid_indices = None
+        assert S < N_train, "度 c 必须小于节点总数 n"
+        if S & 1 != 0:
+            S = S + 1  # 如果 c 是奇数，增加到下一个偶数
+        self.N_train   = N_train
+        self.N_valid   = N_valid
+        self.splits    = splits
+        self.train_idx = train_idx
+        self.valid_idx = valid_idx
+        
+        self.S = S
         self._cnc_cache = {}
 
-    def generate_connection(self, splits: List[Tuple[int, int]], train_idx: torch.Tensor, valid_idx: torch.Tensor):
-        """生成 (n, c) 的邻接表"""
-        G = nx.random_regular_graph(self.S, self.N_train)
-
-        connections = []
+    def generate_graph(self, connect_to_sta: bool = False, N_dyn: int = 0):
+        """生成 (n, c) 的邻接表；同时，为每一个块赋予对应的 (N_T, c) """
+        # G = nx.random_regular_graph(self.S, self.N_train)
+        G = ig.Graph.K_Regular(n=self.N_train, k=self.S, directed=False, multiple=False)
+        
+        graph = []
         for node in range(self.N_train):
             neighbors = list(G.neighbors(node))
             assert len(neighbors) == self.S, f"节点 {node} 邻居数 != {self.S}"
-            connections.append(neighbors)
-
-        self.connections = torch.tensor(connections, dtype=torch.long, pin_memory=True)
-        self.valid_indices   = torch.randint(0, self.N_train, (self.N_valid,), dtype=torch.long)
+            graph.append(neighbors)
+            if connect_to_sta:
+                graph[-1].extend([i for i in range(N_dyn, self.N_train)])
+        self.graph         = torch.tensor(graph, dtype=torch.long, pin_memory=True)
+        self.valid_indices = torch.randint(0, self.N_train, (self.N_valid,), dtype=torch.long)
+        if connect_to_sta:
+            self.S = self.S + (self.N_train - N_dyn)
         
-        for block in splits:
-            cur_type = get_type(block, self.N_train, self.N_valid)
-            self[block] = self.get_connection(
-                get_idx(block, self.N_train, self.N_valid, train_idx, valid_idx),
-                cur_type=cur_type
-            )
-
-    def reset_indices(self, cur_type: str):
-        if cur_type == "train":
-            randperm = torch.randperm(self.N_train)
-            self.connections = randperm[self.connections]
-        else:
-            self.valid_indices = torch.randint(0, self.N_train, (self.N_valid,), dtype=torch.long)
-
-    def get_connection(self, sta_id: Optional[torch.Tensor], cur_type: str):
+        
+        
+    def get_connection(self, sta_id: torch.Tensor, cur_type: str):
         """
         输入:
             sta_id: (m,) 的 LongTensor，表示节点 id
@@ -214,9 +210,37 @@ class Expander_Sample(BaseSample):
             (m, c) 的 LongTensor，每行是对应节点的 c 个邻居 id
         """
         if cur_type == "valid":
-            return self.valid_indices
+            sta_id = sta_id - self.N_train
+            sta_id = self.valid_indices[sta_id]
 
-        return self.connections[sta_id]
+        return self.graph[sta_id]
+
+    def generate_connections(
+        self, expected_type: Literal["train", "valid"], 
+        block2indices: Optional[Dict[Tuple[int, int], Tuple[torch.Tensor, str]]]
+    ):
+        for block in self.splits:
+            cur_type = get_type(block, self.N_train, self.N_valid)
+            if expected_type is not None and cur_type != expected_type:
+                continue 
+            
+            self[block] = self.get_connection(
+                get_idx(block, self.N_train, self.N_valid, self.train_idx, self.valid_idx, block2indices),
+                cur_type=cur_type
+            )
+        
+    def reset_indices(
+        self, cur_type: str, 
+        block2indices: Optional[Dict[Tuple[int, int], Tuple[torch.Tensor, str]]]
+    ):
+        if cur_type == "train":
+            randperm = torch.randperm(self.N_train, pin_memory=True)
+            self.graph = self.graph[randperm]
+            self.generate_connections("train", block2indices=block2indices)
+        else:
+            self.valid_indices = torch.randint(0, self.N_train, (self.N_valid,), dtype=torch.long, pin_memory=True)
+            self.generate_connections("valid", block2indices=block2indices)
+
 
     def get_size(self) -> Tuple[int, int]:
         return (0, self.S)

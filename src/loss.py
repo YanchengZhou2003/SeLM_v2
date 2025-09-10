@@ -120,7 +120,7 @@ def compute_loss(
 
 def compute_weighted_loss(
     loss_type : Tuple[str, str],
-    cro_weight: Tuple[float, float],
+    weight: Tuple[float, float],
     ct_val: torch.Tensor,
     eu_val: torch.Tensor,
     mask: torch.Tensor,
@@ -145,7 +145,7 @@ def compute_weighted_loss(
         loss_cos = torch.abs(ct_val_cos - eu_val_cos)            
     else:
         raise ValueError(f'Unsupported loss kind: {loss_type[0]}')
-    loss_cos = loss_cos * mask_cos
+    loss_cos = loss_cos * mask_cos           # (subT, S, C, D)
     loss_cos = loss_cos.sum(dim=sum_dim)     # (subT, C, D)
     loss_cos = loss_cos / lth_cos            # (subT, C, D) 
 
@@ -178,9 +178,9 @@ def compute_weighted_loss(
     else:
         loss_cro = torch.zeros_like(loss_cos)
     
-    loss_tot     = cro_weight[0] * loss_cos + cro_weight[1] * loss_cro  # (subT, C, D)
+    loss_tot     = weight[0] * loss_cos + weight[1] * loss_cro  # (subT, C, D)
     
-    return loss_tot, loss_cos, loss_cro
+    return loss_cos, loss_cro, loss_tot
 
 
 

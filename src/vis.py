@@ -28,37 +28,37 @@ def visualize_similarity(S_eu: np.ndarray, S_ct: np.ndarray, meta_name="", save_
     S_re = S_eu[order][:, order]
 
     # --- 一张图：左树 + 热图 + 右色条 (eu) ---
-    fig = plt.figure(figsize=(18, 14))
-    gs = fig.add_gridspec(
-        1, 3,
-        width_ratios=[2.5, 14, 0.5],
-        height_ratios=[1.0],
-        wspace=0.0, hspace=0.0
-    )
-
-    # 左侧行树
-    ax_row = fig.add_subplot(gs[0, 0])
-    dendrogram(Z, ax=ax_row, orientation="right", no_labels=True, color_threshold=None)
-    ax_row.invert_yaxis()
-    ax_row.set_xticks([]); ax_row.set_yticks([])
-
-    # 中间热图 (eu)
-    ax = fig.add_subplot(gs[0, 1])
-    vmin, vmax = S_re.min(), S_re.max()
-    norm = PowerNorm(gamma=2.0, vmin=vmin, vmax=vmax)
-    im = ax.imshow(S_re, cmap="inferno", norm=norm,
-                   interpolation="nearest", aspect="equal")
-    ax.set_xticks([]); ax.set_yticks([])
-    ax.set_title("Hierarchical Cosine Similarity (eu)")
-
-    # 右侧颜色条
-    cax = fig.add_subplot(gs[0, 2])
-    cb = fig.colorbar(im, cax=cax)
-    cb.set_label("eu-cosine similarity", rotation=270, labelpad=25)
-
     if save_eu:
+        fig = plt.figure(figsize=(18, 14))
+        gs = fig.add_gridspec(
+            1, 3,
+            width_ratios=[2.5, 14, 0.5],
+            height_ratios=[1.0],
+            wspace=0.0, hspace=0.0
+        )
+
+        # 左侧行树
+        ax_row = fig.add_subplot(gs[0, 0])
+        dendrogram(Z, ax=ax_row, orientation="right", no_labels=True, color_threshold=None)
+        ax_row.invert_yaxis()
+        ax_row.set_xticks([]); ax_row.set_yticks([])
+
+        # 中间热图 (eu)
+        ax = fig.add_subplot(gs[0, 1])
+        vmin, vmax = S_re.min(), S_re.max()
+        norm = PowerNorm(gamma=2.0, vmin=vmin, vmax=vmax)
+        im = ax.imshow(S_re, cmap="inferno", norm=norm,
+                    interpolation="nearest", aspect="equal")
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.set_title("Hierarchical Cosine Similarity (eu)")
+
+        # 右侧颜色条
+        cax = fig.add_subplot(gs[0, 2])
+        cb = fig.colorbar(im, cax=cax)
+        cb.set_label("eu-cosine similarity", rotation=270, labelpad=25)
+
         fig.savefig(sim_eu_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
+        plt.close(fig)
     # print(f"Similarity + tree visualization saved to {sim_eu_path}")
 
     # --- 相似度矩阵 (ct) ---
