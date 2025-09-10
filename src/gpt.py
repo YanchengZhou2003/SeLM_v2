@@ -149,6 +149,9 @@ class GPTLanguageModel(nn.Module):
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
+    def get_sta_emb(self):
+        return F.normalize(self.token_embedding_table.weight, dim=-1)
+    
     def forward(self, idx, targets, return_dyn_emb=False):
         B, T, V = batch_size, block_size, vocab_size
         # idx and targets are both (B,T) tensor of integers
@@ -158,7 +161,7 @@ class GPTLanguageModel(nn.Module):
         x = self.blocks(x) # (B,T,E)
         x: torch.Tensor = self.ln_f(x) # (B,T,E)
         if return_dyn_emb:
-            return x
+            return F.normalize(x, dim=-1)
         
         token_embeddings = self.token_embedding_table.weight  # (V, E)
         logits_eu = 20. * torch.matmul(F.normalize(x, dim=-1), F.normalize(token_embeddings, dim=-1).t()) # (B, T, V)
@@ -225,30 +228,30 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     for _ in range(cte_train_iters):
         X_train, Y_train, _ = get_batch('train', bs=cte_train_bs, to_cuda=True)
         dyn_emb: torch.Tensor = model(X_train, targets=Y_train, return_dyn_emb=True)
-        train_y.append(Y_train.cpu())
-        train_emb.append(dyn_emb.cpu())
+        train_y.append(Y_train[:, -1].cpu())
+        train_emb.append(dyn_emb[:, -1, :].cpu())
     
     for _ in range(cte_eval_iters):
         X_val, Y_val, _ = get_batch('val', bs=cte_eval_bs, to_cuda=True)
         dyn_emb: torch.Tensor = model(X_val, targets=Y_val, return_dyn_emb=True)
-        eval_y.append(Y_val.cpu())
-        eval_emb.append(dyn_emb.cpu())
-    
+        eval_y.append(Y_val[:, -1].cpu())
+        eval_emb.append(dyn_emb[:, -1, :].cpu())
+
     ### step 3: 拼接并保存
     train_cache = {
-        'y': torch.stack(train_y, dim=0).reshape(-1),  # (cte_train_iters * cte_train_bs * block_size)
-        'emb': torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs * block_size, n_embd)
+        'y': torch.stack(train_y, dim=0).reshape(-1),  # (cte_train_iters * cte_train_bs)
+        'emb': torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
     }
     eval_cache = {
-        'y': torch.stack(eval_y, dim=0).reshape(-1),   # (cte_eval_iters  * cte_eval_bs  * block_size)
-        'emb': torch.stack(eval_emb, dim=0).reshape(-1, n_embd)  # (cte_eval_iters   * cte_eval_bs * block_size, n_embd)
+        'y': torch.stack(eval_y, dim=0).reshape(-1),   # (cte_eval_iters  * cte_eval_bs)
+        'emb': torch.stack(eval_emb, dim=0).reshape(-1, n_embd)  # (cte_eval_iters   * cte_eval_bs, n_embd)
     }
     train_cache_length = train_cache['emb'].shape[0] 
     eval_cache_length = eval_cache['emb'].shape[0]
     
     print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
     save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
-    # save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
+    save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
 
 ################ ------------- 训练 CTE ------------- ################
 
@@ -271,7 +274,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     
     ### step 2: 取出数据
     gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu') # (N_vocab, n_embd), not pinned
-    sta_emb     = gpt_weights['token_embedding_table.weight']                      # (N_valid, n_embd), not pinned
+    sta_emb     = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
     train_emb   = torch.cat((train_cache['emb'][:train_length - vocab_size], sta_emb.pin_memory()), dim=0)  
                                                                                    # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
@@ -290,9 +293,9 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     
     ### step 4: 开始训练并同时测试
     #### step 4.1: 直接测 GPT 就好, 这里是在 cpu 上的，不要占 cuda 内存
-    train_logits_eu = train_cache['emb'] @ sta_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
+    train_logits_eu = 20. * train_cache['emb'] @ sta_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
     train_loss_eu   = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
-    valid_logits_eu = valid_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
+    valid_logits_eu = 20. * valid_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
     valid_loss_eu   = F.cross_entropy(valid_logits_eu.view(-1, valid_logits_eu.size(-1)), valid_cache['y'], reduction='mean')
 
     train_pred = train_logits_eu.argmax(dim=-1)            # (train_length,)
@@ -324,8 +327,8 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
 if __name__ == "__main__":
     gpt_ckpt = f"normed_b{block_size}_" + "iters_{}.pth".format(3000)
     # cte_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}.pth"
-    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache.pth"
-
+    # cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache_fixed256.pth"
+    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache_onlylast.pth"
 
 
     # train_gpt(gpt_ckpt)
@@ -334,7 +337,7 @@ if __name__ == "__main__":
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
-    train_cte(cache_ckpt, gpt_ckpt, train_length, 8192)
+    train_cte(cache_ckpt, gpt_ckpt, train_length, 2048)
     
     
     # validate_cte(

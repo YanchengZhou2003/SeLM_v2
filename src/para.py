@@ -8,7 +8,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
-parser.add_argument("--cte_train_bs"   , type=int,   default=1,    help="CTE training batch size")
+parser.add_argument("--cte_train_bs"   , type=int,   default=32,   help="CTE training batch size")
 parser.add_argument("--cte_train_iters", type=int,   default=1,    help="CTE training iterations")
 parser.add_argument("--cte_eval_bs"    , type=int,   default=32,   help="CTE evaluation batch size")
 parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE evaluation iterations")
@@ -21,6 +21,9 @@ parser.add_argument("--h" ,  type=int, default=27 , help="")
 parser.add_argument("--tp" ,  type=int, default=2 , help="")
 parser.add_argument("--instant_writeback" ,  type=int, default=0 , help="")
 parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
+parser.add_argument("--epoch_num" ,  type=int, default=50 , help="")
+parser.add_argument("--converge" ,   type=int, default=10 , help="")
+parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 
 args = parser.parse_args()
 
@@ -63,13 +66,13 @@ N_T               = args.N_T
 train_length      = args.train_length  # 512
 
 loss_strategy: Dict = {
-    'cos_loss'  : 'abs', # 
+    'cos_loss'  : 'square', # 
     'cro_loss'  : 'js', # 
-    'converge'  : 5,
+    'converge'  : args.converge,
     'ratio_cos' : args.ratio_cos,  
     'ratio_cro' : args.ratio_cro    
 }
-epoch_num=25
+epoch_num=args.epoch_num  # 50
 
 
 
@@ -176,7 +179,7 @@ gpt_path = './ckpt/gpt'
 cte_path = './ckpt/cte'
 cache_path = './data/'
 train_cache_path = './ckpt/cte'
-vis_path = f'./vis2/tmp'
+vis_path = args.vis_path
 os.makedirs(vis_path, exist_ok=True)
 
 

@@ -105,7 +105,7 @@ class CritiGraph(torch.nn.Module):
         ) 
         return loss_cos, loss_cro, loss_tot
         
-    def generate_mask(self, block: Tuple[int, int], S: int, S_: int, N_dyn: int):
+    def generate_mask(self, block: Tuple[int, int], N_dyn: int, N_sta: int):
         """
         我们期望的 mask 是这样的：
         1. 对于每一个 Tl, Tr 的块，我们需要生成 (Tr - Tl, S_) 的 mask，它的生成规则如下：
@@ -115,30 +115,28 @@ class CritiGraph(torch.nn.Module):
            (d) 如果 S_ > S，则从 max(N_dyn, Tl) 行开始，(Tr - Tl, S_:S_) 全为 False；其它行为 True
         2. 对于每一个 Tl, Tr 的块，我们需要生成 (Tr - Tl, ) 的 lth，它统计的是每一行在 [0:S) 范围内的 True 数量
         """
-        assert S > 0
         self.masks = []
         self.lth = []
         for i, dev in enumerate(self.devices):
             s, e = block[0] + self.sub_splits[i].start, block[0] + self.sub_splits[i].stop
             T1_local = e - s
             with torch.cuda.device(dev), torch.cuda.stream(self.streams[i]):
-                mask = torch.ones((T1_local, S_), dtype=torch.bool, device=dev)
+                mask = torch.ones((T1_local, self.S - N_sta), dtype=torch.bool, device=dev)
 
                 if not self.converge:
                     choosing_mask = (torch.rand((T1_local,), device=dev) > 0.2)  # True=整行在[0:S)全True
                     sel_idx = (~choosing_mask).nonzero(as_tuple=False).squeeze(1)
                     if sel_idx.numel() > 0:
-                        mask[sel_idx, :S] = False
+                        mask[sel_idx, :self.S - N_sta] = False
                         rows = sel_idx.repeat_interleave(self.sample_k)
-                        cols = torch.randint(0, S, (rows.numel(),), device=dev)
+                        cols = torch.randint(0, self.S - N_sta, (rows.numel(),), device=dev)
                         mask[rows, cols] = True
 
-                if S_ > S:
-                    local_start = max(N_dyn, s) - s
-                    if local_start < T1_local:
-                        mask[local_start:, S:S_] = False
+                local_start = max(N_dyn, s) - s
+                if local_start < T1_local:
+                    mask[local_start:, self.S - N_sta:self.S] = False
 
-                lth_local = mask[:, :S].sum(dim=1).to(torch.int32) + 1e-12
+                lth_local = mask[:, :self.S - N_sta].sum(dim=1).to(torch.int32) + 1e-12
                 self.masks.append(mask)
                 self.lth.append(lth_local)
 
@@ -148,17 +146,16 @@ class CritiGraph(torch.nn.Module):
 
     
     @torch.no_grad()
-    def loom(self, 
-             pos_idx  : torch.Tensor, # (T, S, )
-             pos_emb  : torch.Tensor, # (T, S, dim)
-             cur_type : str,
-             _loss_cos: torch.Tensor, # (T, C, D)
-             _loss_cro: torch.Tensor, # (T, C, D)
-             _loss_tot: torch.Tensor, # (T, C, D)
+    def loom(
+        self, 
+        N_sta: int,
+        _loss_cos: torch.Tensor, # (T, C, D)
+        _loss_cro: torch.Tensor, # (T, C, D)
+        _loss_tot: torch.Tensor, # (T, C, D)
     ):
             
         ### step 1: 获取基本信息
-        T, S = pos_idx.size()
+        T, S = N_T, self.S
         C, D = 2 * self.k * self.h + 1, self.tp
         
         ### step 2: 开始计算
@@ -170,27 +167,9 @@ class CritiGraph(torch.nn.Module):
             
             ### step 2.2: 多 GPU 处理
             with torch.cuda.device(dev), torch.cuda.stream(stream): # type: ignore
-                ### step 2.2.1: 数据传输开始 ###        
-                sub_pos_idx, sub_pos_emb = to_dev(
-                    pos_idx, pos_emb, 
-                    device=dev, 
-                    s=Tl, e=Tr,
-                    dim=0
-                )
-                ### step 2.2.1: 数据传输结束 ###
-                 
-                
                 ### step 2.2.2: 计算开始 ###
                 ### step 2.2.2 (a): 获取基本信息，拼接张量
-                if cur_type == "train":
-                    sub_pos_idx = torch.cat([
-                        sub_pos_idx, self.voc_idx[i].unsqueeze(0).expand(subT, -1)
-                    ], dim=1) # (subT, S + N_sta)
-                    sub_pos_emb = torch.cat([
-                        sub_pos_emb, self.voc_emb[i].unsqueeze(0).expand(subT, -1, -1)
-                    ], dim=1) # (subT, S + N_sta, dim)
-                    # 称 S_ = S + N_sta 或者 S
-                S_ = sub_pos_idx.size(1)
+                pos_loc, pos_emb = self.pos_idx[i], self.pos_emb[i]
                 mask, lth = self.masks[i], self.lth[i] 
                               # (subT, S_), (subT)
                 
@@ -199,15 +178,15 @@ class CritiGraph(torch.nn.Module):
                 sta_emb = self.sta_emb[i]        # (subT, dim)
                 eu_val, eu_norm = normalized_matmul(
                     sta_emb[:, None, :],         # (subT, 1, dim )
-                    sub_pos_emb.transpose(1, 2), # (subT, dim, S_)
+                    pos_emb.transpose(1, 2), # (subT, dim, S_)
                 ) 
                 eu_val, eu_norm  = eu_val.squeeze(1), eu_norm.squeeze(1)
                                                  # (subT, 1, dim) @ (subT, dim, S_) -> (subT, 1, S_) -> (subT, S_) 
-                eu_val [:, S:S_] = self.targets[i] if self.targets[i] is not None else 0
+                eu_val [:, S - N_sta:]   = self.targets[i] if self.targets[i] is not None else 0
                                                  # (subT, S:S_), 的部分放为 groundtruth, (subT, 0:S) 的部分维持
-                eu_norm[:, S:S_] = torch.ones_like(eu_norm[:, S:S_]) * 20 if self.targets[i] is not None else 0
+                eu_norm[:, S - N_sta:]   = torch.ones_like(eu_norm[:, S - N_sta:]) * 20 if self.targets[i] is not None else 0
                                                  # (subT, S:S_), 的部分设为 20，因为 GPT 那里就是这么算的
-                eu_norm[:, 0:S]  = torch.ones_like(eu_norm[:, 0:S ]) 
+                eu_norm[:, 0:S - N_sta]  = torch.ones_like(eu_norm[:, 0:S - N_sta]) 
                                                  # (subT, 0:S ), 的部分设为 1
 
                 
@@ -215,7 +194,6 @@ class CritiGraph(torch.nn.Module):
                 #### step 2.2.2 (c): 计算 CT 空间的值
                 #### step 2.2.2 (c1): 获取起点、候选位置
                 sta_loc = self.sta_loc[i]                # (subT, D)
-                pos_loc = self.locations[i][sub_pos_idx] # (subT, S_, D)
                 cnc_loc = self.cnc_loc[i]                # (subT, C , D)
                 
                 #### step 2.2.2 (c2): 计算距离
@@ -239,7 +217,7 @@ class CritiGraph(torch.nn.Module):
                 loss_cos, loss_cro, loss_tot = self.calc_loss(
                     ct_val, eu_val, 
                     mask[..., None, None], lth,
-                    S, S_
+                    S - N_sta, S
                 )                                                          # (subT, C, tp)           
                 ### 计算：计算结束 ###
                 
@@ -296,6 +274,7 @@ class CritiGraph(torch.nn.Module):
                                        int(int(math.log2(N_train)) ** 2 * sample_factor)
                        )
         sampler      .generate_graph(connect_to_sta=True, N_dyn=N_dyn)
+        self.S       = sampler.S
         # sampler      .generate_connections(expected_type="train")
         # sampler      .generate_connections(expected_type="valid")
         mark(ED, "all_preparation_2", father="all_preparation")
@@ -303,8 +282,8 @@ class CritiGraph(torch.nn.Module):
         
         mark(ST, "all_preparation_3")
         ### step 3: 固定全局不变信息
-        self.voc_emb = [train_emb[sta_slice].to(dev, non_blocking=True) for dev in self.devices] # (N_sta, dim)
-        self.voc_idx = [train_idx[sta_slice].to(dev, non_blocking=True) for dev in self.devices] # (N_sta, )
+        voc_emb = train_emb[sta_slice] # (N_sta, dim)
+        voc_idx = train_idx[sta_slice] # (N_sta, )
         _loss_cos = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
         _loss_cro = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
         _loss_tot = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
@@ -391,10 +370,20 @@ class CritiGraph(torch.nn.Module):
                 mark(ST, "block_preparation_3.1.4")
                 ### step 3.1.4: 获取 pos 信息
                 sample  = sampler[block]
-                pos_idx = train_idx[sample] # (T, S, )
+                pos_idx = train_idx[sample]  # (T, S, )
+                pos_idx = torch.cat([
+                    pos_idx, 
+                    voc_idx.unsqueeze(0).expand(N_T, -1)
+                ], dim=1)                    # (T, S + N_sta)
+                pos_loc = self.main_locations[pos_idx] 
+                                             # (T, S + N_sta, dim)
                 pos_emb = train_emb[pos_idx] # (T, S, dim)
-                # pos_idx, pos_emb = gather_idx_and_emb(train_idx, train_emb, sampler[block])
-                
+                pos_emb = torch.cat([
+                    pos_emb, 
+                    voc_emb.unsqueeze(0).expand(N_T, -1, -1)
+                ], dim=1)                    # (T, S + N_sta, dim)
+                self.pos_loc = [pos_loc[s].to(dev, non_blocking=True) for s, dev in zip_s_d]
+                self.pos_emb = [pos_emb[s].to(dev, non_blocking=True) for s, dev in zip_s_d]
                 mark(ED, "block_preparation_3.1.4", father="block_preparation")
                 
                 mark(ED, "block_preparation", father="block")
@@ -402,7 +391,7 @@ class CritiGraph(torch.nn.Module):
                 
                 mark(ST, "block_calc")
                 ### step 3.1.5: 计算 loss
-                self.loom(pos_idx, pos_emb, cur_type, _loss_cos, _loss_cro, _loss_tot)
+                self.loom(N_sta, _loss_cos, _loss_cro, _loss_tot)
                 selected_locs, real_loss_cos, real_loss_cro, real_loss_tot = self._get_best_loc(
                     cnc_loc,
                     _loss_cos, _loss_cro, _loss_tot, 
@@ -459,12 +448,12 @@ class CritiGraph(torch.nn.Module):
                 print(f"{k:15s}: {v:.4f}", end=", ")
             
             
-            
             ### step 3.4: 验证
             mark(ST, "epoch_valid")
             for split in ['train', 'valid']:
                 cur_splits  = train_splits         if split == 'train' else valid_splits
                 dyn_idx = train_idx[dyn_slice] if split == 'train' else valid_idx
+                dyn_emb = train_emb[dyn_slice] if split == 'train' else valid_emb
                 sta_idx = train_idx[sta_slice] 
                 sta_emb = train_emb[sta_slice]
                 targets = train_tar[dyn_slice] if split == 'train' else valid_tar
@@ -499,10 +488,8 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch_valid", father="epoch")
             mark(ED, "epoch")
             
-            sys.stdout.flush()
-            
             ### step 3.5: 可视化。仅可视化前 256 个
-            if (epoch) % 5 == 0 or epoch == self.epoch_num - 1:
+            if (epoch) % 10 == 0 or epoch == self.epoch_num - 1:
                 train_eu_emb = train_emb[:256]                    # (256, dim)
                 valid_eu_emb = valid_emb[:256]                    # (256, dim)
                 S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
