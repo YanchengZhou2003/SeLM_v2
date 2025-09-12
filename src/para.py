@@ -16,13 +16,13 @@ parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for")
 parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
 parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
 parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
-parser.add_argument("--sample_factor" ,  type=float, default=0.4 , help="Sample factor for Base_Sample")
+parser.add_argument("--sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
 parser.add_argument("--h" ,  type=int, default=27 , help="")
 parser.add_argument("--tp" ,  type=int, default=2 , help="")
 parser.add_argument("--instant_writeback" ,  type=int, default=0 , help="")
 parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
-parser.add_argument("--epoch_num" ,  type=int, default=50 , help="")
-parser.add_argument("--converge" ,   type=int, default=10 , help="")
+parser.add_argument("--epoch_num" ,  type=int, default=5 , help="")
+parser.add_argument("--converge" ,   type=int, default=2 , help="")
 parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 
 args = parser.parse_args()
@@ -30,7 +30,7 @@ args = parser.parse_args()
 # hyperparameters
 batch_size        = 64    
 block_size        = 256
-max_iters         = 6000
+max_iters         = 4000
 val_max_iters     = 1000
 gpt_save_interval = 1000
 learning_rate     = 3e-4
@@ -49,7 +49,7 @@ sample_factor     = args.sample_factor  # 1.0
 eps               = 1e-5 
 division_fact     = 1
 sample_k          = 1
-instant_writeback = args.instant_writeback  # 2
+instant_writeback = args.instant_writeback  # 1
 
 ### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
 ### 最少：1 * 10 * 256 = 2,560, 最多：64 * 10 * 256 = 163,840

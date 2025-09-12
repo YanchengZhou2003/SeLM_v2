@@ -18,7 +18,7 @@ warnings.filterwarnings(
     message=r"You are using `torch\.load` with `weights_only=False`"
 )
 
-from src.cte import *
+from src.cte_speedup import *
 from src.para import *
 from src.utils import *
 from src.vis import *
@@ -284,15 +284,12 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     ### step 2: 初始化 GPT 和 CTE
     emb_size    = train_length + val_length
     cte         = CritiGraph(h, tp, factor, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
+    cte         = torch.compile(cte)
     cte         .eval()
     
-    ### step 3: 基本数据
-    train_idx = torch.arange(0           , train_length, dtype=torch.long, device='cpu', pin_memory=True)  # (N_train,)
-    valid_idx = torch.arange(train_length, emb_size    , dtype=torch.long, device='cpu', pin_memory=True)  # (N_valid,)
     
-    
-    ### step 4: 开始训练并同时测试
-    #### step 4.1: 直接测 GPT 就好, 这里是在 cpu 上的，不要占 cuda 内存
+    ### step 3: 开始训练并同时测试
+    #### step 3.1: 直接测 GPT 就好, 这里是在 cpu 上的，不要占 cuda 内存
     train_logits_eu = 20. * train_cache['emb'] @ sta_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
     train_loss_eu   = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
     valid_logits_eu = 20. * valid_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
@@ -306,10 +303,9 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     print(f"Before CTE Training: train eu loss: {train_loss_eu.item()}, eval eu loss: {valid_loss_eu.item()}")
     print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {valid_acc}")
 
-    #### step 4.2: CTE 训练与测试
-    cte.forward(
+    #### step 3.2: CTE 训练与测试
+    cte.train_all(
         train_emb, valid_emb,
-        train_idx, valid_idx,
         train_cache['y'], valid_cache['y'],
         sample_factor=sample_factor
     )
@@ -333,7 +329,7 @@ if __name__ == "__main__":
 
     # train_gpt(gpt_ckpt)
     # for iters in [0, 1000, 2000, 3000, 4000]:
-    #     eval_gpt(gpt_ckpt.format(iters))
+    # eval_gpt(gpt_ckpt)
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     

@@ -140,3 +140,69 @@ def mark(type: bool, name: str, father: Optional[str] = None) -> None:
         rec.end(name, father)
     else:
         rec.start(name)
+
+
+import torch
+
+
+class CUDATimer:
+    def __init__(self, warmup: int = 3):
+        self.warmup = warmup
+        self.events = {}     # name -> (start_event, end_event)
+        self.records = {}    # name -> [elapsed per round]
+        self.rounds = 0      # 已完成的轮数
+
+    def mark(self, name: str, type: int):
+        """记录开始/结束事件"""
+        if type == 0:  # start
+            start_ev = torch.cuda.Event(enable_timing=True)
+            end_ev   = torch.cuda.Event(enable_timing=True)
+            self.events[name] = (start_ev, end_ev)
+            start_ev.record()
+        elif type == 1:  # end
+            if name not in self.events:
+                raise RuntimeError(f"No start for {name}")
+            _, end_ev = self.events[name]
+            end_ev.record()
+        else:
+            raise ValueError("type must be 0 or 1")
+
+    def finish_round(self):
+        """在每次 loom 结束时调用，统一同步并统计"""
+        torch.cuda.synchronize()
+        for name, (start_ev, end_ev) in self.events.items():
+            elapsed = start_ev.elapsed_time(end_ev)
+            self.records.setdefault(name, []).append(elapsed)
+        self.rounds += 1
+
+    def summary(self, merge_devices=True, width=25):
+        """
+        merge_devices=True: 除了 per-device，还会输出合并后的全局平均
+        width: 每列最小宽度，用于对齐输出
+        """
+        # -------- 先输出 per-device --------
+        print("\nPer-device results:")
+        for name, vals in self.records.items():
+            if len(vals) <= self.warmup:
+                print(f"{name.ljust(width)} not enough records")
+                continue
+            t = torch.tensor(vals[self.warmup:])
+            avg, std, n = t.mean().item(), t.std().item(), len(t)
+            print(f"{name.ljust(width)} avg={avg:8.3f} ms  std={std:8.3f} ms  n={n:5d}")
+
+        # -------- 再输出合并结果 --------
+        if merge_devices:
+            print("\nMerged across devices:")
+            merged = {}
+            for name, vals in self.records.items():
+                short_name = name.split("_", 1)[-1]  # 去掉 devX_
+                merged.setdefault(short_name, []).extend(vals)
+
+            for name, vals in merged.items():
+                if len(vals) <= self.warmup:
+                    print(f"{name.ljust(width)} not enough records")
+                    continue
+                t = torch.tensor(vals[self.warmup:])
+                avg, std, n = t.mean().item(), t.std().item(), len(t)
+                print(f"{name.ljust(width)} avg={avg:8.3f} ms  std={std:8.3f} ms  n={n:5d}")
+

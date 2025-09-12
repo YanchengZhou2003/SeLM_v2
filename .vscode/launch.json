@@ -9,10 +9,15 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [
-        "--train_length", "4096",
-        "--ratio_cos", "0.00",
-        "--ratio_cro", "1.00",
-        "--truncate_valid", "4096",
+        "--train_length",   "2048",
+        "--truncate_valid", "512",
+        "--ratio_cos", "1.00",
+        "--ratio_cro", "0.00",
+        "--sample_factor", "1.0",
+        "--N_T", "512",
+        "--epoch_num", "50",
+        "--converge", "0"
+        
         // "--sample_factor", "0.4",
       ],
       "env": {
