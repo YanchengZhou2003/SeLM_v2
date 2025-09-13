@@ -284,7 +284,7 @@ class CritiGraph(torch.nn.Module):
         splits       = train_splits + valid_splits
         sampler      = Expander_Sampler(N_train, N_valid, N_dyn, N_sta, N_T, splits, train_emb, valid_emb, int(int(math.log2(N_train)) ** 2 * sample_factor), main_device, len(self.streams))
         sampler      .generate_graph(connect_to_sta=True)
-        self.S       = sampler.S + N_sta
+        self.S       = sampler.S_dyn + N_sta
         # sampler      .generate_connections(expected_type="train")
         # sampler      .generate_connections(expected_type="valid")
         mark(ED, "all_preparation_2", father="all_preparation")

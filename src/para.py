@@ -24,7 +24,7 @@ parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for")
 parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
 parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
 parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
-parser.add_argument("--sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
+parser.add_argument("--train_sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
 parser.add_argument("--h" ,  type=int, default=27 , help="")
 parser.add_argument("--tp" ,  type=int, default=2 , help="")
 parser.add_argument("--instant_writeback" ,  type=int, default=0 , help="")
@@ -35,6 +35,9 @@ parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
 parser.add_argument("--cur_portion" ,   type=float, default=0.5 , help="")
 parser.add_argument("--division_fact" ,   type=float, default=1.0 , help="")
+parser.add_argument("--N_VC" ,  type=int, default=4096 , help="")
+parser.add_argument("--N_VT" ,  type=int, default=256  , help="")
+parser.add_argument("--use_eu_norm" ,  type=int, default=256  , help="")
 
 args = parser.parse_args()
 
@@ -56,13 +59,16 @@ dropout           = 0.2
 h                 = args.h
 tp                = args.tp
 factor            = 1 
-sample_factor     = args.sample_factor  # 1.0
+train_sample_factor = args.train_sample_factor  # 1.0
+N_VC              = args.N_VC  # 4096
+N_VT              = args.N_VT  # 256
 eps               = 1e-5 
 division_fact     = 1.
 sample_k          = 1
 instant_writeback = args.instant_writeback  # 1
 cur_tp            = args.cur_tp  # 2
 cur_portion       = args.cur_portion  # 0.5
+use_eu_norm       = args.use_eu_norm  # 1
 
 ### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
 ### 最少：1 * 10 * 256 = 2,560, 最多：64 * 10 * 256 = 163,840
@@ -73,6 +79,7 @@ cte_eval_bs       = args.cte_eval_bs     # 32
 cte_eval_iters    = args.cte_eval_iters  # 1
 cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
 cte_save_interval = 1
+
 
 N_T               = args.N_T
 

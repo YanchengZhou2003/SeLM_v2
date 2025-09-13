@@ -307,7 +307,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     cte.train_all(
         train_emb, valid_emb,
         train_cache['y'], valid_cache['y'],
-        sample_factor=sample_factor
+        train_sample_factor=train_sample_factor,
     )
 
 

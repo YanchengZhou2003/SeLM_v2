@@ -18,8 +18,8 @@ from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
 from src.loom_kernel_full import ct_loss_triton
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import (ED, N_T, ST, cur_portion, cur_tp, generators,
-                      instant_writeback, n_embd, vocab_size)
+from src.para import (ED, N_T, N_VC, N_VT, ST, cur_portion, cur_tp, generators,
+                      instant_writeback, n_embd, vocab_size, use_eu_norm)
 from src.sampler import BaseSample, Expander_Sampler, Prefetcher
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -113,35 +113,38 @@ class CritiGraph(torch.nn.Module):
         ) 
         return loss_cos, loss_cro, loss_tot
         
-    def generate_mask(self, block: Tuple[int, int], N_dyn: int, dev_num=0):
+    def generate_mask(self, block: Tuple[int, int], cur_type: str, dev_num=0):
         """
         我们期望的 mask 是这样的：
-        1. 对于每一个 Tl, Tr 的块，我们需要生成 (Tr - Tl, S_) 的 mask，它的生成规则如下：
-           (a) 如果 self.converge == False，则以 0.8 的概率，整行在 [0:S) 范围内全为 True
-           (b) 如果 self.converge == False，则以 0.2 的概率，整行在 [0:S) 范围内全为 True，但随机选择 self.sample_k 个位置设为 True
-           (c) 如果 self.converge == True ，则整行在 [0:S) 范围内全为 True
-           (d) 如果 S_ > S，则从 max(N_dyn, Tl) 行开始，(Tr - Tl, S_:S_) 全为 False；其它行为 True
-        2. 对于每一个 Tl, Tr 的块，我们需要生成 (Tr - Tl, ) 的 lth，它统计的是每一行在 [0:S) 范围内的 True 数量
+        1. 我们需要生成 (T, S) 的 mask，它的生成规则如下：
+        (a) 如果是 train:
+            (1) 如果 self.converge 为 False，则随机；否则首先全 True
+            (2) 如果 N_dyn < Tr, 则 [max(N_dyn - Tl, 0):] 的行中，[self.N_sta:] 全为 False
+        (b) 如果是 valid:
+            (1) 如果 self.converge 为 False，则随机；否则首先全 True
         """
-        device = self.devices[dev_num]
-        mask   = torch.ones((self.N_T, self.S_tot), dtype=torch.bool, device=device)
+        device  = self.devices[dev_num]
+        tot_lth = self.S_tot if cur_type == "train" else self.T_val
+        mask   = torch.ones((self.T, tot_lth), dtype=torch.bool, device=device)
         Tl, Tr = block
         
         if not self.converge:
-            choosing_mask = (torch.rand((self.N_T,), device=device) > 0.2)  
+            choosing_mask = (torch.rand((self.T,), device=device) > 0.2)  
             sel_idx = (~choosing_mask).nonzero(as_tuple=False).squeeze(1)
             if sel_idx.numel() > 0:
-                mask[sel_idx, :self.S_cos] = False
+                cutoff = self.S_cos if cur_type == "train" else self.T_val
+                mask[sel_idx, :cutoff] = False
                 rows = sel_idx.repeat_interleave(self.sample_k)
-                cols = torch.randint(0, self.S_cos, (rows.numel(),), device=device, generator=generators[dev_num])
+                cols = torch.randint(0, cutoff, (rows.numel(),), device=device, generator=generators[dev_num])
                 mask[rows, cols] = True
+        if cur_type == "train":
+            if Tr > self.N_dyn:
+                local_start = max(0, self.N_dyn - Tl)
+                mask[local_start:, self.N_sta] = False
+            lth = mask[:, :self.S_cos].sum(dim=1) + 1e-12
+        elif cur_type == "valid":
+            lth = mask[:, :          ].sum(dim=1) + 1e-12
 
-        if Tr > N_dyn:
-            local_start = max(0, N_dyn - Tl)
-            mask[local_start:, self.S_cos : self.S_tot] = False
-
-        lth = mask[:, :self.S_cos].sum(dim=1) + 1e-12
-        
         return mask, lth
 
     # @torch.compile()
@@ -156,7 +159,7 @@ class CritiGraph(torch.nn.Module):
         device = self.devices[sid]
         
         # step1: 每个样本在 [0, tp) 之间随机生成一个排列（通过排序 trick）
-        rand_vals     = torch.rand((self.N_T, self.tp), device=device, generator=generators[sid]) # (T, D)
+        rand_vals     = torch.rand((self.T, self.tp), device=device, generator=generators[sid]) # (T, D)
         rand_cols     = rand_vals.argsort(dim=1)[:, :cur_tp]           # (T, cur_tp)
         # print(rand_cols[:4, :2])
         
@@ -168,8 +171,8 @@ class CritiGraph(torch.nn.Module):
 
         # step4: 高级索引直接填充
         # T_indices     = torch.arange(self.N_T,    device=device)[:, None]                # (T, 1)
-        t_idx = torch.arange(self.N_T, device=loss_tot.device)[:, None].expand(self.N_T, cur_tp)  # (T, upd)
-        t_mask = torch.rand(self.N_T, device=device, generator=generators[sid]) < cur_portion  # (T,)
+        t_idx = torch.arange(self.T, device=loss_tot.device)[:, None].expand(self.T, cur_tp)  # (T, upd)
+        t_mask = torch.rand(self.T, device=device, generator=generators[sid]) < cur_portion  # (T,)
         t_idx, rand_cols = t_idx[t_mask], rand_cols[t_mask]  # (T_upd, ), (T_upd, upd)
         
         cnc_indices[t_idx, rand_cols] = argmin_all[t_idx, rand_cols]
@@ -382,7 +385,7 @@ class CritiGraph(torch.nn.Module):
         train_tar : torch.Tensor, # (N_train, )   , pinned memory
         valid_tar : torch.Tensor, # (N_valid, )   , pinned memory
         
-        sample_factor: float = 1.,
+        train_sample_factor: float = 1.,
         ### 以上张量全部放在 cpu，避免占用 gpu 内存
     ):  
         """
@@ -394,7 +397,9 @@ class CritiGraph(torch.nn.Module):
         
         ### step 1: 获取基本信息，构造分块与采样
         mark(ST, "all_preparation_1")
-        self.N_T   = N_T
+        self.T   = N_T
+        self.S_val = N_VC
+        self.T_val = N_VT
         self.N_train, self.N_valid = train_emb.size(0), valid_emb.size(0)
         self.N_dyn  , self.N_sta   = self.N_train - vocab_size, vocab_size
         self.dyn_slice             = slice(0, self.N_dyn)
@@ -402,14 +407,14 @@ class CritiGraph(torch.nn.Module):
         assert self.N_train % N_T == 0 and self.N_valid % N_T == 0, f"N_train 和 N_valid 必须是 N_T 的整数倍，但现在是 {self.N_train}, {self.N_valid}, {N_T}"
         train_splits = make_splits(0      , self.N_train          , N_T) 
         valid_splits = make_splits(self.N_train, self.N_train + self.N_valid, N_T)
-        self.splits       = train_splits + valid_splits
+        self.splits  = train_splits + valid_splits
         mark(ED, "all_preparation_1", father="all_preparation")
         
         
         ### step.2 准备数据分块与采样器
         mark(ST, "all_preparation_2")
-        self.voc_emb    = [train_emb[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices]
-        self.voc_loc    = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices]
+        self.voc_emb    = [train_emb[self.sta_slice].unsqueeze(0).expand(self.T, -1, -1).to(dev) for dev in self.devices]
+        self.voc_loc    = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.T, -1, -1).to(dev) for dev in self.devices]
         self.tar_splits = [
             train_tar[block[0]:block[1]].to(i % self.num_devices) 
                 if block[0] < self.N_train else
@@ -418,27 +423,23 @@ class CritiGraph(torch.nn.Module):
         ]
         
         self.sampler    = Expander_Sampler(
-            self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.N_T,
+            self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.T,
             self.splits,
             train_emb, valid_emb,
-            int(int(math.log2(self.N_train)) ** 2 * sample_factor),
+            int(int(math.log2(self.N_train)) ** 2 * train_sample_factor), 
+            self.S_val, self.T_val,
             main_device,
-            len(self.streams)
+            len(self.streams),
+            use_eu_norm=use_eu_norm
         )
-        self.sampler.generate_graph(connect_to_sta=True)
-        self.sampler.reset_indices("train")
-        self.sampler.reset_indices("valid")
+        self.sampler.generate_graph()
+        self.sampler.generate_connections("train")
+        self.sampler.generate_connections("valid")
         self.sampler.update_locations(self.main_locations)
         self.prefetcher = Prefetcher(main_device, self.devices, self.streams, self.sampler, 4)
-        self.S_tot = self.sampler.S + self.N_sta
-        self.S_cos = self.sampler.S
-        self.eu_norm = [
-            torch.cat([
-                torch.ones((N_T, self.S_cos), device=device) ,
-                torch.ones((N_T, self.N_sta), device=device) * 20.
-            ], dim=1)
-            for device in self.devices
-        ]
+        self.S_tot = self.sampler.S_dyn + self.N_sta
+        self.S_cos = self.sampler.S_dyn
+
         # self.loc_splits = [
         #     self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices])  
         #     for i, block in enumerate(self.splits)
@@ -478,15 +479,10 @@ class CritiGraph(torch.nn.Module):
                 "train_cos_loss" :  0.,
                 "train_cro_loss" :  0.,
                 "train_tot_loss" :  0.,
-                "valid_cos_loss" :  0.,
-                "valid_cro_loss" :  0.,
-                "valid_tot_loss" :  0.,
             }
             
             if epoch % 50 == 0 and epoch != 0:
                 self.sampler.reset_indices("train")
-            if epoch % 5 == 0 and epoch != 0:
-                self.sampler.reset_indices("valid")
             
 
             self._synchronize_all_streams()
@@ -513,7 +509,7 @@ class CritiGraph(torch.nn.Module):
             #     self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices])  
             #     for i, block in enumerate(self.splits)
             # ]
-            self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices] # 如果出现 CUDA BUG，可以尝试把这行代码放到上面 epoch 循环的开头
+            self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.T, -1, -1).to(dev) for dev in self.devices] # 如果出现 CUDA BUG，可以尝试把这行代码放到上面 epoch 循环的开头
             self._pending_refs = {sid: [] for sid in range(self.num_devices)}
             
             self.sampler.update_locations(self.main_locations)
@@ -522,7 +518,7 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch_pos_train", father="epoch")
             ### step 3.2: 记录与打印
             
-            for cur_type in ["train", "valid"]:
+            for cur_type in ["train"]:
                 if cur_type == "train":
                     cur_N = self.N_train
                     cur_slice = slice(0, self.N_train)
@@ -540,7 +536,6 @@ class CritiGraph(torch.nn.Module):
                     print(f"{k:15s}: {v:.6f}", end=", ")
                 else:
                     print(f"{k:15s}: {v:.4f}", end=", ")
-            print()
             ### step 3.3: 验证
             mark(ST, "epoch_valid")
             self.validate(epoch)
@@ -561,7 +556,12 @@ class CritiGraph(torch.nn.Module):
         # self.timer.summary()
         mark(ED, "all_epoch", father="all")
         mark(ED, "all")
-        
+    
+    def test_time_train_all(
+        self,
+        reset_locations: bool = False
+    ):
+        ...
         
     
     def validate(self, epoch):
@@ -600,8 +600,8 @@ class CritiGraph(torch.nn.Module):
     
     def visualize(self, epoch: int):
         if (epoch ) % 50 == 0 or epoch == self.epoch_num - 1:
-            train_eu_emb = self.sampler.emb[:256]                           # (256, dim)
-            valid_eu_emb = self.sampler.emb[self.N_train:self.N_train+256]  # (256, dim)
+            train_eu_emb = self.sampler.emb_val[:256]                           # (256, dim)
+            valid_eu_emb = self.sampler.emb_val[self.N_train:self.N_train+256]  # (256, dim)
             S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
             S_vt_eu      = normalized_matmul(valid_eu_emb, train_eu_emb.t())[0].cpu().numpy()
             
