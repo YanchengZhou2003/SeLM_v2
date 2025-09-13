@@ -140,7 +140,8 @@ def compute_weighted_loss(
     if   loss_type[0] == 'square':
         loss_cos = torch.square(ct_val_cos - eu_val_cos)     
     elif loss_type[0] == 'lap':
-        loss_cos = torch.square(ct_val_cos - eu_val_cos) * torch.abs(eu_val_cos)            
+        loss_cos = torch.square(ct_val_cos - eu_val_cos)
+        loss_cos.mul_(torch.abs(eu_val_cos))
     elif loss_type[0] == 'abs':
         loss_cos = torch.abs(ct_val_cos - eu_val_cos)            
     else:
@@ -156,7 +157,7 @@ def compute_weighted_loss(
     
         # 概率型：对类别维做 softmax，再计算散度
         log_ct_cro = F.log_softmax(ct_val_cro, dim=sum_dim)
-        log_eu_cro = F.log_softmax(eu_val_cro, dim=sum_dim)
+        log_eu_cro = F.log_softmax(20. * eu_val_cro, dim=sum_dim)
 
         if loss_type[1] == 'kl':
             loss_cro = F.kl_div(
@@ -170,6 +171,8 @@ def compute_weighted_loss(
                 log_target=True,
                 reduction='none'
             )                                # (subT, S_ - S, C, D)
+        elif loss_type[1] == 'cro': # 交叉熵
+            loss_cro = - log_ct_cro * eu_val_cro # (subT, S_ - S, C, D)
         else:
             raise ValueError(f'Unsupported loss kind: {loss_type[1]}')
 

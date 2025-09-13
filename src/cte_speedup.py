@@ -18,8 +18,8 @@ from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
 from src.loom_kernel_full import ct_loss_triton
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import (ED, N_T, ST, cur_tp, cur_portion, generators, instant_writeback,
-                      n_embd, vocab_size)
+from src.para import (ED, N_T, ST, cur_portion, cur_tp, generators,
+                      instant_writeback, n_embd, vocab_size)
 from src.sampler import BaseSample, Expander_Sampler, Prefetcher
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -327,7 +327,7 @@ class CritiGraph(torch.nn.Module):
                         )                                                            # (T, C, D)
                         # print(cnc_loc[0, :5, 0])
                         mask, lth = self.generate_mask(block, self.N_dyn, sid)       # (T, S_tot), (T)
-                        targets   = F.one_hot(targets, num_classes=self.N_sta) * 1e2    if targets is not None else None        # (T, )
+                        targets   = F.one_hot(targets, num_classes=self.N_sta) if targets is not None else None        # (T, )
                         # self.timer.mark(f"dev{sid}_Ad_Preparation", 1)
                     
                     
@@ -536,8 +536,11 @@ class CritiGraph(torch.nn.Module):
                 loss_split_record[f"{cur_type}_tot_loss"] = self.loss_tot_buf[cur_slice].sum().item() / cur_N
             
             print(f"epoch {epoch:3d} summary:", end=" ")
-            for k, v in loss_split_record.items():     
-                print(f"{k:15s}: {v:.4f}", end=", ")
+            for k, v in loss_split_record.items():    
+                if k.startswith("train_cos"): 
+                    print(f"{k:15s}: {v:.6f}", end=", ")
+                else:
+                    print(f"{k:15s}: {v:.4f}", end=", ")
             print()
             ### step 3.3: 验证
             mark(ST, "epoch_valid")
@@ -597,7 +600,7 @@ class CritiGraph(torch.nn.Module):
         print()
     
     def visualize(self, epoch: int):
-        if (epoch ) % 100 == 0 or epoch == self.epoch_num - 1:
+        if (epoch ) % 50 == 0 or epoch == self.epoch_num - 1:
             train_eu_emb = self.sampler.emb[:256]                           # (256, dim)
             valid_eu_emb = self.sampler.emb[self.N_train:self.N_train+256]  # (256, dim)
             S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()

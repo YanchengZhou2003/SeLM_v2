@@ -78,8 +78,8 @@ N_T               = args.N_T
 train_length      = args.train_length  # 512
 
 loss_strategy: Dict = {
-    'cos_loss'  : 'square', # 
-    'cro_loss'  : 'js', # 
+    'cos_loss'  : 'lap', # 
+    'cro_loss'  : 'cro', # 
     'converge'  : args.converge,
     'ratio_cos' : args.ratio_cos,  
     'ratio_cro' : args.ratio_cro    
