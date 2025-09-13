@@ -49,7 +49,7 @@ class CritiGraph(torch.nn.Module):
         self.tp = tp
         self.n = int(2**h)
         self.c = f
-        self.k = int(f*h // division_fact)
+        self.k = int(f*h / division_fact)
         self.loss_strategy = loss_strategy
         self.emb_size = emb_size
         self.epoch_num = epoch_num
@@ -311,7 +311,6 @@ class CritiGraph(torch.nn.Module):
                             if not evt.query():   # 如果事件还没完成
                                 new_pending.append((refs, evt))
                         self._pending_refs[sid] = new_pending
-                        
                         # self.timer.mark(f"dev{sid}_ALL", 0)
                         # self.timer.mark(f"dev{sid}_Basic_Preparation", 0)
                         ### step 3.1.0: 准备基本信息

@@ -34,6 +34,7 @@ parser.add_argument("--converge" ,   type=int, default=2 , help="")
 parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
 parser.add_argument("--cur_portion" ,   type=float, default=0.5 , help="")
+parser.add_argument("--division_fact" ,   type=float, default=1.0 , help="")
 
 args = parser.parse_args()
 
@@ -57,7 +58,7 @@ tp                = args.tp
 factor            = 1 
 sample_factor     = args.sample_factor  # 1.0
 eps               = 1e-5 
-division_fact     = 1
+division_fact     = 1.
 sample_k          = 1
 instant_writeback = args.instant_writeback  # 1
 cur_tp            = args.cur_tp  # 2

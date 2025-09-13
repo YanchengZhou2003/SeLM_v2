@@ -133,10 +133,11 @@ def kernel_ct_val_fused_cd(
     NUM_WARPS: tl.constexpr,
     NUM_STAGES: tl.constexpr,
 ):
+    i64 = tl.int64
     # ---- program_id：三维 ----
-    pid_t  = tl.program_id(0)                       # [0, T)
-    pid_s  = tl.program_id(1)                       # tile over S
-    pid_cd = tl.program_id(2)                       # tile over (C*D)
+    pid_t  = tl.program_id(0).to(i64)                       # [0, T)
+    pid_s  = tl.program_id(1).to(i64)                       # tile over S
+    pid_cd = tl.program_id(2).to(i64)                       # tile over (C*D)
 
     # ---- 本 tile 的行/列索引 ----
     offs_s  = pid_s  * BLOCK_S  + tl.arange(0, BLOCK_S)         # (BLOCK_S,)

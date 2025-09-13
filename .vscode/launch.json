@@ -9,23 +9,27 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [
-        "--train_length",   "2048",
-        "--truncate_valid", "512",
-        "--ratio_cos", "1.00",
-        "--ratio_cro", "0.00",
-        "--sample_factor", "1.0",
-        "--N_T", "512",
-        "--epoch_num", "50",
-        "--converge", "0"
+        "--train_length",   "4096",
+        "--truncate_valid", "4096",
+        "--ratio_cos", "0.99995",
+        "--ratio_cro", "0.00005",
+        "--sample_factor", "3.0",
+        "--N_T", "128",
+        "--h", "18",
+        "--tp", "64",
+        "--cur_tp", "4",
+        "--cur_portion", "0.5",
+        "--epoch_num", "1000",
+        "--converge", "20"
         
         // "--sample_factor", "0.4",
       ],
       "env": {
-        // "TRITON_CODEGEN_DEBUG": "1",
-        // "TRITON_DUMP_LLVM": "1",
-        // "TRITON_DUMP_ASM": "1",
-        // "TRITON_INTERPRET": "1",
-        // "CUDA_LAUNCH_BLOCKING": "1"
+        "TRITON_CODEGEN_DEBUG": "1",
+        "TRITON_DUMP_LLVM": "1",
+        "TRITON_DUMP_ASM": "1",
+        "TRITON_INTERPRET": "1",
+        "CUDA_LAUNCH_BLOCKING": "1"
       },
 
     },
