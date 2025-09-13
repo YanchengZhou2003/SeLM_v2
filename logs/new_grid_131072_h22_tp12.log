@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "/home/yancheng/SeLM_v2/src/cte_speedup.py", line 335, in train_epoch
+    selected_locs, loss_cos, loss_cro, loss_tot = self.loom(
+  File "/home/yancheng/SeLM_v2/src/cte_speedup.py", line 270, in loom
+    loss_cos, loss_cro, loss_tot = self.calc_loss(
+  File "/home/yancheng/SeLM_v2/src/cte_speedup.py", line 107, in calc_loss
+    loss_cos, loss_cro, loss_tot = compute_weighted_loss(
+  File "/home/yancheng/SeLM_v2/src/loss.py", line 141, in compute_weighted_loss
+    loss_cos = torch.square(ct_val_cos - eu_val_cos)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 6.40 GiB. GPU 2 has a total capacity of 23.65 GiB of which 3.10 GiB is free. Including non-PyTorch memory, this process has 20.53 GiB memory in use. Of the allocated memory 13.67 GiB is allocated by PyTorch, and 6.41 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

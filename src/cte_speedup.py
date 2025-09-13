@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 from datetime import datetime
+from time import sleep
 
 import matplotlib.pyplot as plt
 import torch
@@ -17,7 +18,8 @@ from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
 from src.loom_kernel_full import ct_loss_triton
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import ED, N_T, ST, instant_writeback, n_embd, vocab_size
+from src.para import (ED, N_T, ST, cur_tp, generators, instant_writeback,
+                      n_embd, vocab_size)
 from src.sampler import BaseSample, Expander_Sampler, Prefetcher
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -38,8 +40,8 @@ class CritiGraph(torch.nn.Module):
         super().__init__() 
         ### 1：设备信息
         self.main_device = main_device
-        self.devices = [torch.device(f"cuda:{i}") for i in range(1, torch.cuda.device_count())]
-        self.streams = [torch.cuda.Stream(device=dev) for dev in self.devices]
+        self.devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
+        self.streams = [torch.cuda.default_stream(i) for i in range(torch.cuda.device_count())]
         self.num_devices = len(self.devices)        
     
         ### 2. 基本参数
@@ -53,14 +55,16 @@ class CritiGraph(torch.nn.Module):
         self.epoch_num = epoch_num
         
         ### 3. CT Space Embeddings 初始化
-        self.main_locations = torch.randint(1 - self.n, self.n, (self.emb_size, self.tp), dtype=torch.int64, device=main_device)
-        self.locations = [self.main_locations.clone().to(dev, non_blocking=True) for dev in self.devices]
-        torch.cuda.synchronize()
+        self.main_locations = torch.randint(
+            1 - self.n, self.n, (self.emb_size, self.tp), 
+            dtype=torch.int64, device=main_device, generator=generators[0]
+        )
+        self.locations = [self.main_locations.clone().to(dev) for dev in self.devices]
 
         ### 4. 训练时参数
         self.epoch = -1
         self.sample_k = sample_k
-        
+        self._pending_refs = {sid: [] for sid in range(self.num_devices)}
         self._valid_mask_cache = {}
         
         self.timer = CUDATimer()
@@ -70,7 +74,11 @@ class CritiGraph(torch.nn.Module):
         device = self.devices[dev_num] if dev_num >= 0 else 'cpu'
 
         upper_bounds   = 2 ** torch.arange(self.h, dtype=torch.int64, device=device)
-        random_numbers = torch.randint(0, self.n, (self.h, sz, self.k, self.tp), dtype=torch.int64, device=device) # (H, B*T, K, D)
+        random_numbers = torch.randint(
+            0, self.n, 
+            (self.h, sz, self.k, self.tp), 
+            dtype=torch.int64, device=device, generator=generators[dev_num]
+        ) # (H, B*T, K, D)
         masks = random_numbers & (upper_bounds.view(-1, 1, 1, 1) - 1)
         # masks = random_numbers % upper_bounds.view(-1, 1, 1, 1)
         return masks.permute(1, 0, 2, 3) # (B*T, H, K, D)
@@ -125,7 +133,7 @@ class CritiGraph(torch.nn.Module):
             if sel_idx.numel() > 0:
                 mask[sel_idx, :self.S_cos] = False
                 rows = sel_idx.repeat_interleave(self.sample_k)
-                cols = torch.randint(0, self.S_cos, (rows.numel(),), device=device)
+                cols = torch.randint(0, self.S_cos, (rows.numel(),), device=device, generator=generators[dev_num])
                 mask[rows, cols] = True
 
         if Tr > N_dyn:
@@ -147,8 +155,25 @@ class CritiGraph(torch.nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]: 
         device = self.devices[sid]
         
-        cnc_indices   = torch.argmin(loss_tot, dim=1)                                    # (T, D)
-        T_indices     = torch.arange(cnc_loc.size(0),    device=device)[:, None]         # (T, 1)
+        # step1: 每个样本在 [0, tp) 之间随机生成一个排列（通过排序 trick）
+        rand_vals     = torch.rand((self.N_T, self.tp), device=device, generator=generators[sid]) # (T, D)
+        rand_cols     = rand_vals.argsort(dim=1)[:, :cur_tp]           # (T, cur_tp)
+        # print(rand_cols[:4, :2])
+        
+        # step2: 每个 (t, dim) 的 argmin
+        argmin_all    = torch.argmin(loss_tot, dim=1)                  # (T, D)
+
+        # step3: 初始化为 "保持不更新"
+        cnc_indices   = torch.full_like(argmin_all, self.k * self.h)   # (T, D)
+
+        # step4: 高级索引直接填充
+        # T_indices     = torch.arange(self.N_T,    device=device)[:, None]                # (T, 1)
+        t_idx = torch.arange(self.N_T, device=loss_tot.device)[:, None].expand(self.N_T, cur_tp)  # (T, upd)
+        cnc_indices[t_idx, rand_cols] = argmin_all[t_idx, rand_cols]
+        # print(loss_tot.shape[1], cnc_indices.max().item(), cnc_indices.min().item())
+        
+        # cnc_indices   = torch.argmin(loss_tot, dim=1)                                  # (T, D)
+        T_indices     = torch.arange(cnc_loc.size(0),    device=device)[:, None]       # (T, 1)
         dim_indices   = torch.arange(self.tp    ,        device=device)[None  :]         # (1, D)
         selected_locs = cnc_loc [T_indices, cnc_indices,  dim_indices]                   # (T, D)
         
@@ -210,27 +235,27 @@ class CritiGraph(torch.nn.Module):
         # self.timer.mark(f"dev{sid}_COS_Calc", 0)
         
         
-        # ct_val = ct_val_triton(
-        #     cnc_loc.to(torch.int32).contiguous(),
-        #     pos_loc.to(torch.int32).contiguous(),
-        #     eu_norm.contiguous(),
-        #     cos_sta_pos.contiguous(),
-        #     cos_sta_pos_sum.contiguous(),
-        #     tp=float(self.tp),
-        #     h=float(self.h),
-        #     out=None,                # 或传入你复用的 out 缓冲
-        #     BLOCK_S=32,
-        #     BLOCK_CD=32,
-        #     NUM_WARPS=8,
-        #     NUM_STAGES=2,
-        # )
+        ct_val = ct_val_triton(
+            cnc_loc.to(torch.int32).contiguous(),
+            pos_loc.to(torch.int32).contiguous(),
+            eu_norm.contiguous(),
+            cos_sta_pos.contiguous(),
+            cos_sta_pos_sum.contiguous(),
+            tp=float(self.tp),
+            h=float(self.h),
+            out=None,                # 或传入你复用的 out 缓冲
+            BLOCK_S=32,
+            BLOCK_CD=32,
+            NUM_WARPS=8,
+            NUM_STAGES=2,
+        )
         
-        cos_cnc_pos     = self.distance(
-            cnc_loc[:, None, :, :], pos_loc[:, :, None,:], eu_norm[..., None, None]
-        )                                        # (T, S_tot, C, D)
-        ct_val          = (
-            cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
-        ) / self.tp                              # (T, S_tot, C, D)
+        # cos_cnc_pos     = self.distance(
+        #     cnc_loc[:, None, :, :], pos_loc[:, :, None,:], eu_norm[..., None, None]
+        # )                                        # (T, S_tot, C, D)
+        # ct_val          = (
+        #     cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
+        # ) / self.tp                              # (T, S_tot, C, D)
         
         
         ## 对于 T 个 starting point，向 S_tot 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
@@ -261,65 +286,89 @@ class CritiGraph(torch.nn.Module):
         
 
     def train_epoch(self, sid: int):
-        stream = self.streams[sid]
-        device = self.devices[sid]
-        for epoch in range(self.epoch_num):
-            # 等待主线程的信号
-            # print(f"[sid={sid}] epoch {epoch} reached barrier 1")
-            self.epoch_barrier.wait()
-            # print(f"[sid={sid}] epoch {epoch} passed barrier 1")
-            
-            while True:
-                block_id, block, pos_loc, eu_val = self.prefetcher.get_sample(sid)
-                if block is None:
-                    break
-                with torch.cuda.device(device), torch.cuda.stream(stream):
-                    # self.timer.mark(f"dev{sid}_ALL", 0)
-                    # self.timer.mark(f"dev{sid}_Basic_Preparation", 0)
-                    ### step 3.1.0: 准备基本信息
-                    cur_type   = get_type(block, self.N_train, self.N_valid)
-                    targets    = self.tar_splits[block_id].to(device, non_blocking=True) if cur_type == "train" else None    # (T, )                                                   
-                    # self.timer.mark(f"dev{sid}_Basic_Preparation", 1)
+        try:
+            stream = self.streams[sid]
+            device = self.devices[sid]
+            for epoch in range(self.epoch_num):
+                # 等待主线程的信号
+                # print(f"[sid={sid}] epoch {epoch} reached barrier 1")
+                self.epoch_barrier.wait()
+                # print(f"[sid={sid}] epoch {epoch} passed barrier 1")
                 
-                
-                    # self.timer.mark(f"dev{sid}_Ad_Preparation", 0)
-                    ### step 3.1.1: 准备全局连接信息、可见邻居信息
-                    sta_loc   = self.loc_splits[block_id]                        # (T, D)
-                    cnc_loc   = self.connection(
-                        sta_loc, dev_num=sid
-                    )                                                            # (T, C, D)
-                    # print(cnc_loc[0, :5, 0])
-                    mask, lth = self.generate_mask(block, self.N_dyn, sid)       # (T, S_tot), (T)
-                    targets   = F.one_hot(targets, num_classes=self.N_sta) * 1e2    if targets is not None else None        # (T, )
-                    # self.timer.mark(f"dev{sid}_Ad_Preparation", 1)
-                
-                
-                    ### step 3.1.4: 获取 pos 信息
-                    # self.timer.mark(f"dev{sid}_LOOM", 0)
-                    cur_type   = "train" if block[0] < self.N_train else "valid"
-                    selected_locs, loss_cos, loss_cro, loss_tot = self.loom(
-                        sta_loc, cnc_loc, pos_loc, 
-                        eu_val, targets,
-                        mask, lth, sid
-                    )
-                    # self.timer.mark(f"dev{sid}_LOOM", 1)
+                while True:
+                    block_id, block, sta_loc, pos_loc, eu_val, ready_evt = self.prefetcher.get_sample(sid)
+                    if block is None:
+                        break
+                    # time.sleep(0.2)
+                    with torch.cuda.device(device), torch.cuda.stream(stream):
+                        stream.wait_event(ready_evt)  # 等待 copy 流完成
+                        ### step 3.1.-1 处理引用持有
+                        new_pending = []
+                        for (refs, evt) in self._pending_refs[sid]:
+                            if not evt.query():   # 如果事件还没完成
+                                new_pending.append((refs, evt))
+                        self._pending_refs[sid] = new_pending
+                        
+                        # self.timer.mark(f"dev{sid}_ALL", 0)
+                        # self.timer.mark(f"dev{sid}_Basic_Preparation", 0)
+                        ### step 3.1.0: 准备基本信息
+                        cur_type   = get_type(block, self.N_train, self.N_valid)
+                        targets    = self.tar_splits[block_id] if cur_type == "train" else None    # (T, )                                                   
+                        # self.timer.mark(f"dev{sid}_Basic_Preparation", 1)
                     
                     
-                    # self.timer.mark(f"dev{sid}_WRITE", 0)
-                    # print(f"at GPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cos: {loss_cos.mean().item():.4f}, loss_cro: {loss_cro.mean().item():.4f}, loss_tot: {loss_tot.mean().item():.4f}")
-                    self.loc_splits[block_id] = selected_locs
-                    # self.main_locations[block[0]:block[1]].copy_(selected_locs, non_blocking=True)
-                    self.loss_cos_buf  [block[0]:block[1]].copy_(loss_cos, non_blocking=True)
-                    self.loss_cro_buf  [block[0]:block[1]].copy_(loss_cro, non_blocking=True)
-                    self.loss_tot_buf  [block[0]:block[1]].copy_(loss_tot, non_blocking=True)
-                    # print(f"at CPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cro: {self.loss_cro_buf[block[0]:block[1]].mean().item():.8f}. mask_sum: {mask.sum().item():.8f}")
-                    # print(f"at CPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cos: {self.loss_cos_buf[block[0]:block[1]].mean().item():.4f}, loss_cro: {self.loss_cro_buf[block[0]:block[1]].mean().item():.4f}, loss_tot: {self.loss_tot_buf[block[0]:block[1]].mean().item():.4f}")
-                    # self.timer.mark(f"dev{sid}_WRITE", 1)     
-                    # self.timer.mark(f"dev{sid}_ALL", 1)           
-            
-            # print(f"[sid={sid}] epoch {epoch} reached barrier 2")
-            self.epoch_barrier.wait()
-            # print(f"[sid={sid}] epoch {epoch} passed barrier 2")
+                        # self.timer.mark(f"dev{sid}_Ad_Preparation", 0)
+                        ### step 3.1.1: 准备全局连接信息、可见邻居信息
+                        cnc_loc   = self.connection(
+                            sta_loc, dev_num=sid
+                        )                                                            # (T, C, D)
+                        # print(cnc_loc[0, :5, 0])
+                        mask, lth = self.generate_mask(block, self.N_dyn, sid)       # (T, S_tot), (T)
+                        targets   = F.one_hot(targets, num_classes=self.N_sta) * 1e2    if targets is not None else None        # (T, )
+                        # self.timer.mark(f"dev{sid}_Ad_Preparation", 1)
+                    
+                    
+                        ### step 3.1.4: 获取 pos 信息
+                        # self.timer.mark(f"dev{sid}_LOOM", 0)
+                        cur_type   = "train" if block[0] < self.N_train else "valid"
+                        selected_locs, loss_cos, loss_cro, loss_tot = self.loom(
+                            sta_loc, cnc_loc, pos_loc, 
+                            eu_val, targets,
+                            mask, lth, sid
+                        )
+                        # self.timer.mark(f"dev{sid}_LOOM", 1)
+                        
+                        
+                        # self.timer.mark(f"dev{sid}_WRITE", 0)
+                        # print(f"at GPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cos: {loss_cos.mean().item():.4f}, loss_cro: {loss_cro.mean().item():.4f}, loss_tot: {loss_tot.mean().item():.4f}")
+                        # self.loc_splits  [block_id] = selected_locs
+                        # self.loss_cos_buf[block_id] = loss_cos
+                        # self.loss_cro_buf[block_id] = loss_cro
+                        # self.loss_tot_buf[block_id] = loss_tot
+                        self.main_locations[block[0]:block[1]].copy_(selected_locs, non_blocking=True)
+                        self.loss_cos_buf[block[0]:block[1]].copy_(loss_cos, non_blocking=True)
+                        self.loss_cro_buf[block[0]:block[1]].copy_(loss_cro, non_blocking=True)
+                        self.loss_tot_buf[block[0]:block[1]].copy_(loss_tot, non_blocking=True)
+                        # print(block_id)
+                        # 在当前 stream 上打一个事件
+                        evt = torch.cuda.Event(enable_timing=False, blocking=False)
+                        evt.record(stream)
+
+                        # 保存引用（必须把三个张量都放进 tuple，不然会被回收）
+                        self._pending_refs[sid].append(((selected_locs, loss_cos, loss_cro, loss_tot), evt))
+                        # print(f"at CPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cro: {self.loss_cro_buf[block[0]:block[1]].mean().item():.8f}. mask_sum: {mask.sum().item():.8f}")
+                        # print(f"at CPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cos: {self.loss_cos_buf[block[0]:block[1]].mean().item():.4f}, loss_cro: {self.loss_cro_buf[block[0]:block[1]].mean().item():.4f}, loss_tot: {self.loss_tot_buf[block[0]:block[1]].mean().item():.4f}")
+                        # self.timer.mark(f"dev{sid}_WRITE", 1)     
+                        # self.timer.mark(f"dev{sid}_ALL", 1)           
+                
+                # print(f"[sid={sid}] epoch {epoch} reached barrier 2")
+                self.epoch_barrier.wait()
+                # print(f"[sid={sid}] epoch {epoch} passed barrier 2")
+        except Exception as e:
+            print(f"Exception in thread {sid}: {e}")
+            import traceback
+            traceback.print_exc()
+            os._exit(1)  # 立即终止所有线程和进程
                     
 
     @gettime(fmt='ms', pr=True)
@@ -357,10 +406,15 @@ class CritiGraph(torch.nn.Module):
         
         ### step.2 准备数据分块与采样器
         mark(ST, "all_preparation_2")
-        self.voc_emb    = [train_emb[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev, non_blocking=True) for dev in self.devices]
-        self.voc_loc    = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev, non_blocking=True) for dev in self.devices]
-        self.tar_splits = [train_tar[block[0]:block[1]].pin_memory() if block[0] < self.N_train else
-                        valid_tar[block[0] - self.N_train:block[1] - self.N_train].pin_memory() for block in self.splits]
+        self.voc_emb    = [train_emb[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices]
+        self.voc_loc    = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices]
+        self.tar_splits = [
+            train_tar[block[0]:block[1]].to(i % self.num_devices) 
+                if block[0] < self.N_train else
+            valid_tar[block[0] - self.N_train:block[1] - self.N_train].to(i % self.num_devices) 
+                for i, block in enumerate(self.splits)
+        ]
+        
         self.sampler    = Expander_Sampler(
             self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.N_T,
             self.splits,
@@ -379,13 +433,21 @@ class CritiGraph(torch.nn.Module):
         self.eu_norm = [
             torch.cat([
                 torch.ones((N_T, self.S_cos), device=device) ,
-                torch.ones((N_T, self.N_sta), device=device) * 20
+                torch.ones((N_T, self.N_sta), device=device) * 20.
             ], dim=1)
             for device in self.devices
         ]
-        self.loss_cos_buf = torch.zeros(self.emb_size, device="cpu", pin_memory=True)
-        self.loss_cro_buf = torch.zeros(self.emb_size, device="cpu", pin_memory=True)
-        self.loss_tot_buf = torch.zeros(self.emb_size, device="cpu", pin_memory=True)
+        # self.loc_splits = [
+        #     self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices])  
+        #     for i, block in enumerate(self.splits)
+        # ]
+        # self.loss_cos_buf = [None for _ in range(len(self.splits))] # torch.zeros(self.emb_size, device="cpu", pin_memory=True)
+        # self.loss_cro_buf = [None for _ in range(len(self.splits))] # torch.zeros(self.emb_size, device="cpu", pin_memory=True)
+        # self.loss_tot_buf = [None for _ in range(len(self.splits))] # torch.zeros(self.emb_size, device="cpu", pin_memory=True)
+        self.loss_cos_buf = torch.zeros(self.emb_size, device=main_device)
+        self.loss_cro_buf = torch.zeros(self.emb_size, device=main_device)
+        self.loss_tot_buf = torch.zeros(self.emb_size, device=main_device)
+        self._synchronize_all_streams()
         mark(ED, "all_preparation_2", father="all_preparation")
         
         
@@ -419,16 +481,13 @@ class CritiGraph(torch.nn.Module):
                 "valid_tot_loss" :  0.,
             }
             
-            # if epoch % 10 == 0 and epoch != 0:
-            #     self.sampler.reset_indices("train")
-            # if epoch % 2 == 0 and epoch != 0:
-            #     self.sampler.reset_indices("valid")
+            if epoch % 25 == 0 and epoch != 0:
+                self.sampler.reset_indices("train")
+            if epoch % 5 == 0 and epoch != 0:
+                self.sampler.reset_indices("valid")
             
-            self.loc_splits = [
-                self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices], non_blocking=True) 
-                for i, block in enumerate(self.splits)
-            ]
-            
+
+            self._synchronize_all_streams()
             mark(ED, "epoch_preparation", father="epoch")
             mark(ST, "epoch_train")
             
@@ -441,21 +500,26 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch_train", father="epoch")
             mark(ST, "epoch_pos_train")
             # self.timer.finish_round() 
-            for sid in range(len(self.devices)):
-                self.streams[sid].synchronize()
             
-            #### 生产者线程可以继续工作，没必要等到下一轮 epoch
-            self.sampler.new_epoch()
-            self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev, non_blocking=True) for dev in self.devices]
+            ### 整合数据
+            # self.main_locations = torch.cat([self.loc_splits[i].to(main_device) for i in range(len(self.splits))], dim=0)
+            # loss_cos = torch.cat([self.loss_cos_buf[i].to(main_device) for i in range(len(self.splits))], dim=0)
+            # loss_cro = torch.cat([self.loss_cro_buf[i].to(main_device) for i in range(len(self.splits))], dim=0)
+            # loss_tot = torch.cat([self.loss_tot_buf[i].to(main_device) for i in range(len(self.splits))], dim=0)
+            self._synchronize_all_streams()
+            # self.loc_splits = [
+            #     self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices])  
+            #     for i, block in enumerate(self.splits)
+            # ]
+            self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices] # 如果出现 CUDA BUG，可以尝试把这行代码放到上面 epoch 循环的开头
+            self._pending_refs = {sid: [] for sid in range(self.num_devices)}
+            
             self.sampler.update_locations(self.main_locations)
-            
-            for sid in range(len(self.devices)):
-                with self.prefetcher._cv[sid]:
-                    self.prefetcher._new_epoch_flag[sid] = True
-                    self.prefetcher._cv[sid].notify()
-            mark(ED, "epoch_pos_train", father="epoch")
+            self.prefetcher.new_epoch()
 
+            mark(ED, "epoch_pos_train", father="epoch")
             ### step 3.2: 记录与打印
+            
             for cur_type in ["train", "valid"]:
                 if cur_type == "train":
                     cur_N = self.N_train
@@ -474,12 +538,12 @@ class CritiGraph(torch.nn.Module):
             print()
             ### step 3.3: 验证
             mark(ST, "epoch_valid")
-            # self.validate()
+            self.validate(epoch)
             mark(ED, "epoch_valid", father="epoch")
             mark(ED, "epoch")
             
             ### step 3.4: 可视化
-            # self.visualize(epoch)
+            self.visualize(epoch)
 
         print("一切都已经结束了")
         
@@ -495,9 +559,11 @@ class CritiGraph(torch.nn.Module):
         
         
     
-    def validate(self):
+    def validate(self, epoch):
         loss = {"train": 0., "valid": 0.}
         accuracy = {"train": 0., "valid": 0.}
+        if epoch % 10 != 0 and epoch != 0:
+            return
         
         for i, block in enumerate(self.splits):
             cur_type    = get_type(block, self.N_train, self.N_valid)
@@ -527,7 +593,7 @@ class CritiGraph(torch.nn.Module):
         print()
     
     def visualize(self, epoch: int):
-        if (epoch ) % 10 == 0 or epoch == self.epoch_num - 1:
+        if (epoch ) % 100 == 0 or epoch == self.epoch_num - 1:
             train_eu_emb = self.sampler.emb[:256]                           # (256, dim)
             valid_eu_emb = self.sampler.emb[self.N_train:self.N_train+256]  # (256, dim)
             S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
@@ -541,7 +607,13 @@ class CritiGraph(torch.nn.Module):
             visualize_similarity   (S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
             visualize_pair_bihclust(S_vt_eu, S_vt_ct, meta_name="{}" + "valid_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
 
-
-    
+    def _synchronize_all_streams(self):
+        torch.cuda.synchronize()
+        torch.cuda.default_stream(main_device).synchronize()
+        for sid in range(self.num_devices):
+            self.streams[sid].synchronize()
+            self.prefetcher.copy_streams[sid].synchronize()
+        self.prefetcher.prod_stream.synchronize()
+        
 if __name__ == "__main__":
     pass

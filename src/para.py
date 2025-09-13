@@ -1,10 +1,18 @@
 import argparse
 import os
+import signal
 from typing import Dict, Optional
+
+
+# def handler(sig, frame):
+#     print("SIGINT received, force exit.")
+#     os._exit(1)
+
+# signal.signal(signal.SIGINT, handler)
 
 import torch
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
@@ -24,6 +32,7 @@ parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
 parser.add_argument("--epoch_num" ,  type=int, default=5 , help="")
 parser.add_argument("--converge" ,   type=int, default=2 , help="")
 parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
+parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
 
 args = parser.parse_args()
 
@@ -50,6 +59,7 @@ eps               = 1e-5
 division_fact     = 1
 sample_k          = 1
 instant_writeback = args.instant_writeback  # 1
+cur_tp            = args.cur_tp  # 2
 
 ### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
 ### 最少：1 * 10 * 256 = 2,560, 最多：64 * 10 * 256 = 163,840
@@ -73,7 +83,7 @@ loss_strategy: Dict = {
     'ratio_cro' : args.ratio_cro    
 }
 epoch_num=args.epoch_num  # 50
-
+generators = {}
 
 
 '''
@@ -132,31 +142,18 @@ def set_seed(seed: int = 42, deterministic: bool = True, benchmark: bool = False
 
     try:
         import torch
-
         torch.manual_seed(seed)
-        # CUDA（若可用）
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)  # 多 GPU
+        
+        for dev_id in range(torch.cuda.device_count()):
+            g = torch.Generator(device=f"cuda:{dev_id}")
+            g.manual_seed(seed + dev_id + 1)  # 每个 GPU 使用不同种子
+            generators[dev_id] = g
+                # torch.cuda.manual_seed_all(seed + i + 1)  # 多 GPU
 
         # cuDNN / 后端设置
         ## torch.backends.cudnn.deterministic = deterministic
-        torch.backends.cudnn.benchmark = benchmark
+        # torch.backends.cudnn.benchmark = benchmark
 
-        # 新版 PyTorch 的确定性设置（如可用）
-        # if hasattr(torch, "use_deterministic_algorithms"):
-        #     torch.use_deterministic_algorithms(deterministic, warn_only=True)
-
-        # Apple MPS（如可用）
-        if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            # 目前 MPS 不完全可复现，但仍设置 manual_seed
-            pass
-
-        # DataLoader 的 worker 复现性（提示用法）
-        # 在 DataLoader 中使用：
-        # generator = torch.Generator()
-        # generator.manual_seed(seed)
-        # DataLoader(..., generator=generator, worker_init_fn=lambda w_id: np.random.seed(seed + w_id))
     except ImportError:
         # 未安装 torch 时忽略
         pass

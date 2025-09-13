@@ -176,12 +176,12 @@ class Expander_Sampler(BaseSample):
         self.splits       = splits
         self.block4stream = [list(range(sid, len(self.splits), num_streams)) for sid in range(num_streams)] 
         self.stream_ptr   = [0 for _ in range(num_streams)]
-        self.emb          = torch.cat([train_emb.to(main_device, non_blocking=True), valid_emb.to(main_device, non_blocking=True)], dim=0)
+        self.emb          = torch.cat([train_emb.to(main_device), valid_emb.to(main_device)], dim=0)
         
         self.S = ori_S
         self.main_device = main_device
         self.num_streams = num_streams  
-        self.main_locations = None
+        self.main_locations = torch.empty(0)
         self._cnc_cache = {}
         self._loc_cache = {}
         self._eu_val_cache = {}
@@ -258,9 +258,13 @@ class Expander_Sampler(BaseSample):
             return block_id, block
         return None, None
 
+    # def get_voc_loc(self) -> torch.Tensor:
+    #     return self.main_locations[self.voc_slice] # (T, N_sta, D)
     
+    def get_sta_loc(self, block: Tuple[int, int]) -> torch.Tensor:
+        return self.main_locations[block[0]:block[1]] # (T, D)
     
-    def get_loc(self, block: Tuple[int, int]) -> torch.Tensor:
+    def get_pos_loc(self, block: Tuple[int, int]) -> torch.Tensor:
         return self.main_locations[self.get_cnc(block)] # (T, S_cos, D)
         
     def get_val(self, block: Tuple[int, int]) -> torch.Tensor:
@@ -334,6 +338,18 @@ class Prefetcher:
             thread.start()
             self._threads.append(thread)
     
+    def new_epoch(self): 
+        for sid in range(len(self.devices)):
+            self.ready_cache[sid].clear()
+            self.src_hold[sid].clear()
+            self._new_epoch_flag[sid] = True
+        
+        self.sampler.new_epoch()
+        
+        for sid in range(len(self.devices)):
+            with self._cv[sid]:
+                self._cv[sid].notify()
+    
     def stop(self):
         if not self._run:
             return
@@ -354,56 +370,64 @@ class Prefetcher:
     
     # ------------ 后台工作线程 ------------ #
     def _worker(self, sid: int):
-        dev   = self.devices[sid]
-        cstr  = self.copy_streams[sid]
-        cv    = self._cv[sid]
-        
-        while self._run:
+        try:
+            dev   = self.devices[sid]
+            cstr  = self.copy_streams[sid]
+            cv    = self._cv[sid]
             
-            # 尝试释放 src_hold，也即 main_device 的显存
-            self._drain_src_hold(sid)  
+            while self._run:
+                
+                # 尝试释放 src_hold，也即 main_device 的显存
+                self._drain_src_hold(sid)  
+                
+                with cv: # 当前锁
+                    while self._run and len(self.ready_cache[sid]) >= self.num_prefetch:
+                        cv.wait(timeout=10000)  # 等待被唤醒，或超时
+                    if not self._run:
+                        break
+                
+                # 尝试拉取下一个 block
+                block_id, block = self.sampler.next_block(sid)
+                if block is None:
+                    self.ready_cache[sid].append((None, None, None, None, None, None))
+                    with cv:
+                        cv.notify()
+                        # 不 break，而是等主线程设置某个标志
+                        while self._run and not self._new_epoch_flag[sid]:
+                            cv.wait(timeout=10000)
+                        self._new_epoch_flag[sid] = False
+                        continue  # 回到 while self._run:，进入新一轮生产
             
-            with cv: # 当前锁
-                while self._run and len(self.ready_cache[sid]) >= self.num_prefetch:
-                    cv.wait(timeout=0.001)  # 等待被唤醒，或超时
-                if not self._run:
-                    break
-            
-            # 尝试拉取下一个 block
-            block_id, block = self.sampler.next_block(sid)
-            if block is None:
-                self.ready_cache[sid].append((None, None, None, None, None))
+                # (1) 生产阶段：队列未满，且有 block 可取，则开启生产线程
+                with torch.cuda.device(self.main_device), torch.cuda.stream(self.prod_stream): # type: ignore
+                    sta_loc_src = self.sampler.get_sta_loc(block)   # (T, D)
+                    pos_loc_src = self.sampler.get_pos_loc(block)   # (T, S_tot, D)
+                    pos_val_src = self.sampler.get_val(block)       # (T, dim)
+                    ready_evt_for_copy_done = torch.cuda.Event(enable_timing=False, blocking=False)
+                    ready_evt_for_copy_done.record(self.prod_stream)  # 在生产流上记录 ready
+                
+                # (2) 传输阶段：在 copy stream 上等待 ready，然后拷贝到目标设备
+                with torch.cuda.device(dev), torch.cuda.stream(cstr): # type: ignore
+                    cstr.wait_event(ready_evt_for_copy_done)  # 等待生产流完成
+                    sta_loc_dev = sta_loc_src.to(dev, non_blocking=True)
+                    pos_loc_dev = pos_loc_src.to(dev, non_blocking=True)
+                    pos_val_dev = pos_val_src.to(dev, non_blocking=True)
+                    all_ready_evt = torch.cuda.Event(enable_timing=False, blocking=False)
+                    all_ready_evt.record(cstr)  # 在 copy stream 上记录 ready 事件
+
+                # (3) 保持引用：防止 pos_loc_src/pos_val_src 被释放；之所以可能被释放，是因为 with 之后就是线程的自主运行
+                self.src_hold[sid].append((sta_loc_src, pos_loc_src, pos_val_src, all_ready_evt))
+                
+                # (4) 放入就绪缓存
+                self.ready_cache[sid].append((block_id, block, sta_loc_dev, pos_loc_dev, pos_val_dev, all_ready_evt))
+
                 with cv:
-                    cv.notify()
-                    # 不 break，而是等主线程设置某个标志
-                    while self._run and not self._new_epoch_flag[sid]:
-                        cv.wait(timeout=0.01)
-                    self._new_epoch_flag[sid] = False
-                    continue  # 回到 while self._run:，进入新一轮生产
-        
-            # (1) 生产阶段：队列未满，且有 block 可取，则开启生产线程
-            with torch.cuda.device(self.main_device), torch.cuda.stream(self.prod_stream): # type: ignore
-                pos_loc_src = self.sampler.get_loc(block)   # (N_T, )
-                pos_val_src = self.sampler.get_val(block)   # (N_T, dim
-                ready_evt_for_copy_done = torch.cuda.Event(enable_timing=False, blocking=False)
-                ready_evt_for_copy_done.record(self.prod_stream)  # 在生产流上记录 ready
-            
-            # (2) 传输阶段：在 copy stream 上等待 ready，然后拷贝到目标设备
-            with torch.cuda.device(dev), torch.cuda.stream(cstr): # type: ignore
-                cstr.wait_event(ready_evt_for_copy_done)  # 等待生产流完成
-                pos_loc_dev = pos_loc_src.to(dev, non_blocking=True)
-                pos_val_dev = pos_val_src.to(dev, non_blocking=True)
-                all_ready_evt = torch.cuda.Event(enable_timing=False, blocking=False)
-                all_ready_evt.record(cstr)  # 在 copy stream 上记录 ready 事件
-
-            # (3) 保持引用：防止 pos_loc_src/pos_val_src 被释放；之所以可能被释放，是因为 with 之后就是线程的自主运行
-            # self.src_hold[sid].append((pos_loc_src, pos_val_src, all_ready_evt))
-            
-            # (4) 放入就绪缓存
-            self.ready_cache[sid].append((block_id, block, pos_loc_dev, pos_val_dev, all_ready_evt))
-
-            with cv:
-                cv.notify()  # 通知可能在等待的 get_sample
+                    cv.notify()  # 通知可能在等待的 get_sample
+        except Exception as e:
+            print(f"Exception in thread {sid}: {e}")
+            import traceback
+            traceback.print_exc()
+            os._exit(1)  # 立即终止所有线程和进程
     
     def _drain_src_hold(self, sid: int, quota: int = 4):
         """尝试释放指定 sid 的 src_hold 中的部分内存"""
@@ -411,18 +435,19 @@ class Prefetcher:
         cnt = 0
         
         while dq and cnt < quota:
-            loc_src, emb_src, evt = dq[0]
-            if not evt.query():
+            _, _, _, evt = dq[0]
+            if evt.query():
                 dq.popleft()
+                cnt += 1
             else:
                 break
-            cnt += 1
+            
     
     
     
     # ------------ 计算侧获取 ------------ #
     
-    def get_sample(self, sid: int) -> Tuple[int, Tuple[int,int], torch.Tensor, torch.Tensor]:  
+    def get_sample(self, sid: int) -> Tuple[int, Tuple[int,int], torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:  
         """
         仅消费：若队列为空，阻塞等待；不做调度。
         消费后通知后台线程以便补货。
@@ -433,24 +458,24 @@ class Prefetcher:
         
         with cv:
             while self._run and len(self.ready_cache[sid]) == 0:
-                cv.wait(timeout=0.001)  # 等待被唤醒，或超时
+                cv.wait(timeout=10000)  # 等待被唤醒，或超时
             if not self._run:
                 raise RuntimeError("Prefetcher 已停止")
             
         # 如果队列非空，则取出
-        block_id, block, pos_loc_dev, pos_val_dev, ready_evt = self.ready_cache[sid].popleft()
-        if block is None:
-            return None, None, None, None
+        block_id, block, sta_loc_dev, pos_loc_dev, pos_val_dev, ready_evt = self.ready_cache[sid].popleft()
+        # if block is None:
+        #     return None, None, None, None
         
-        # 计算流需要等待 ready_evt
-        comp_stream = self.compute_stream[sid]
-        with torch.cuda.device(device): # type: ignore
-            comp_stream.wait_event(ready_evt)  # 等待 copy 流完成
+        # # 计算流需要等待 ready_evt
+        # comp_stream = self.compute_stream[sid]
+        # with torch.cuda.device(device): # type: ignore
+        #     comp_stream.wait_event(ready_evt)  # 等待 copy 流完成
             
         with cv:
             cv.notify()  # 通知可能在等待的生产线程
         
-        return block_id, block, pos_loc_dev, pos_val_dev
+        return block_id, block, sta_loc_dev, pos_loc_dev, pos_val_dev, ready_evt
 
 # from typing import Tuple
 
