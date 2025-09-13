@@ -3,6 +3,7 @@ import os
 import signal
 from typing import Dict, Optional
 
+import torch
 
 # def handler(sig, frame):
 #     print("SIGINT received, force exit.")
@@ -10,9 +11,8 @@ from typing import Dict, Optional
 
 # signal.signal(signal.SIGINT, handler)
 
-import torch
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
@@ -33,6 +33,7 @@ parser.add_argument("--epoch_num" ,  type=int, default=5 , help="")
 parser.add_argument("--converge" ,   type=int, default=2 , help="")
 parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
+parser.add_argument("--cur_portion" ,   type=float, default=0.5 , help="")
 
 args = parser.parse_args()
 
@@ -60,6 +61,7 @@ division_fact     = 1
 sample_k          = 1
 instant_writeback = args.instant_writeback  # 1
 cur_tp            = args.cur_tp  # 2
+cur_portion       = args.cur_portion  # 0.5
 
 ### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
 ### 最少：1 * 10 * 256 = 2,560, 最多：64 * 10 * 256 = 163,840

@@ -18,7 +18,7 @@ from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
 from src.loom_kernel_full import ct_loss_triton
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import (ED, N_T, ST, cur_tp, generators, instant_writeback,
+from src.para import (ED, N_T, ST, cur_tp, cur_portion, generators, instant_writeback,
                       n_embd, vocab_size)
 from src.sampler import BaseSample, Expander_Sampler, Prefetcher
 from src.utils import *
@@ -169,6 +169,9 @@ class CritiGraph(torch.nn.Module):
         # step4: 高级索引直接填充
         # T_indices     = torch.arange(self.N_T,    device=device)[:, None]                # (T, 1)
         t_idx = torch.arange(self.N_T, device=loss_tot.device)[:, None].expand(self.N_T, cur_tp)  # (T, upd)
+        t_mask = torch.rand(self.N_T, device=device, generator=generators[sid]) < cur_portion  # (T,)
+        t_idx, rand_cols = t_idx[t_mask], rand_cols[t_mask]  # (T_upd, ), (T_upd, upd)
+        
         cnc_indices[t_idx, rand_cols] = argmin_all[t_idx, rand_cols]
         # print(loss_tot.shape[1], cnc_indices.max().item(), cnc_indices.min().item())
         
@@ -481,7 +484,7 @@ class CritiGraph(torch.nn.Module):
                 "valid_tot_loss" :  0.,
             }
             
-            if epoch % 25 == 0 and epoch != 0:
+            if epoch % 50 == 0 and epoch != 0:
                 self.sampler.reset_indices("train")
             if epoch % 5 == 0 and epoch != 0:
                 self.sampler.reset_indices("valid")
@@ -588,6 +591,7 @@ class CritiGraph(torch.nn.Module):
                 cur_N = self.N_valid
             loss[cur_type]     /= cur_N
             accuracy[cur_type] /= cur_N
+            
             print(f"{cur_type:5s} loss: {loss[cur_type]:.4f}, accuracy: {accuracy[cur_type]:.4f}", end=", ")
 
         print()
