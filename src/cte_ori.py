@@ -14,7 +14,7 @@ from tqdm import tqdm
 from src.gettime import CUDATimer, gettime, mark
 # from src.loom_kernel import triton_loom_wrapper
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import ED, N_T, ST, instant_writeback, n_embd, vocab_size
+from src.para import ED, ST, N_vocab, T, instant_writeback, n_embd
 from src.sampler import BaseSample, Expander_Sampler
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -158,7 +158,7 @@ class CritiGraph(torch.nn.Module):
     ):
             
         ### step 1: 获取基本信息
-        T, S = N_T, self.S
+        T, S = T, self.S
         C, D = 2 * self.k * self.h + 1, self.tp
         
         ### step 2: 开始计算
@@ -271,18 +271,18 @@ class CritiGraph(torch.nn.Module):
         
         mark(ST, "all_preparation_1")
         ### step 1: 获取基本信息
-        N_dyn  , N_sta   = N_train - vocab_size, vocab_size
+        N_dyn  , N_sta   = N_train - N_vocab, N_vocab
         dyn_slice        = slice(0, N_dyn)
         sta_slice        = slice(N_dyn, N_train)
-        assert N_train % N_T == 0 and N_valid % N_T == 0, f"N_train 和 N_valid 必须是 N_T 的整数倍，但现在是 {N_train}, {N_valid}, {N_T}"
+        assert N_train % T == 0 and N_valid % T == 0, f"N_train 和 N_valid 必须是 N_T 的整数倍，但现在是 {N_train}, {N_valid}, {T}"
         mark(ED, "all_preparation_1", father="all_preparation")
         
         mark(ST, "all_preparation_2")
         ### step 2: 构造分块与采样
-        train_splits = make_splits(0      , N_train          , N_T) 
-        valid_splits = make_splits(N_train, N_train + N_valid, N_T)
+        train_splits = make_splits(0      , N_train          , T) 
+        valid_splits = make_splits(N_train, N_train + N_valid, T)
         splits       = train_splits + valid_splits
-        sampler      = Expander_Sampler(N_train, N_valid, N_dyn, N_sta, N_T, splits, train_emb, valid_emb, int(int(math.log2(N_train)) ** 2 * sample_factor), main_device, len(self.streams))
+        sampler      = Expander_Sampler(N_train, N_valid, N_dyn, N_sta, T, splits, train_emb, valid_emb, int(int(math.log2(N_train)) ** 2 * sample_factor), main_device, len(self.streams))
         sampler      .generate_graph(connect_to_sta=True)
         self.S       = sampler.S_dyn + N_sta
         # sampler      .generate_connections(expected_type="train")
@@ -294,14 +294,14 @@ class CritiGraph(torch.nn.Module):
         ### step 3: 固定全局不变信息
         voc_emb = train_emb[sta_slice] # (N_sta, dim)
         voc_idx = train_idx[sta_slice] # (N_sta, )
-        _loss_cos = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
-        _loss_cro = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
-        _loss_tot = torch.empty((N_T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
-        self.pos_loc = [torch.empty((N_T // len(self.devices), self.S, self.tp), dtype=torch.int64, device=dev) for dev in self.devices]
+        _loss_cos = torch.empty((T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
+        _loss_cro = torch.empty((T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
+        _loss_tot = torch.empty((T, 2 * self.k * self.h + 1, self.tp), dtype=torch.float32, pin_memory=True) # (T, C, D)
+        self.pos_loc = [torch.empty((T // len(self.devices), self.S, self.tp), dtype=torch.int64, device=dev) for dev in self.devices]
         self.pos_emb = [
             torch.cat([
-                torch.empty((N_T // len(self.devices), self.S - N_sta, n_embd),  dtype=torch.int64, device=dev),
-                voc_emb.unsqueeze(0).expand(N_T // len(self.devices), -1, -1).to(dev),
+                torch.empty((T // len(self.devices), self.S - N_sta, n_embd),  dtype=torch.int64, device=dev),
+                voc_emb.unsqueeze(0).expand(T // len(self.devices), -1, -1).to(dev),
             ], dim=1)
             for dev in self.devices
         ]
@@ -346,7 +346,7 @@ class CritiGraph(torch.nn.Module):
                 mark(ST, "block_preparation_3.1.0")
                 ### step 3.1.0: 获取基本信息
                 bs         = block[1] - block[0]
-                assert bs == N_T, "每个 block 的大小必须等于 N_T"
+                assert bs == T, "每个 block 的大小必须等于 N_T"
                 
                 sub_splits = list(map(int, 
                     torch.linspace(0, block[1] - block[0], len(self.devices) + 1, dtype=torch.int64).tolist()            
@@ -391,7 +391,7 @@ class CritiGraph(torch.nn.Module):
                 pos_emb = train_emb[pos_idx] # (T, S - N_sta, dim), cuda:0
                 pos_loc = self.locations[0][pos_idx] 
                                              # (T, S - N_sta, dim), cuda:0
-                voc_loc = self.locations[0][voc_idx].expand(N_T, -1, -1) 
+                voc_loc = self.locations[0][voc_idx].expand(T, -1, -1) 
                                              # (T, N_sta, dim),     cuda:0
                 
                 for i, dev in enumerate(self.devices):

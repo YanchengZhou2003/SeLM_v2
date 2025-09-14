@@ -135,7 +135,7 @@ class GPTLanguageModel(nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
+        self.token_embedding_table = nn.Embedding(N_vocab, n_embd)
         self.blocks = nn.Sequential(*[Block(n_embd, n_head=n_head) for _ in range(n_layer)])
         self.ln_f = nn.LayerNorm(n_embd) # final layer norm
 
@@ -153,7 +153,7 @@ class GPTLanguageModel(nn.Module):
         return F.normalize(self.token_embedding_table.weight, dim=-1)
     
     def forward(self, idx, targets, return_dyn_emb=False):
-        B, T, V = batch_size, block_size, vocab_size
+        B, T, V = batch_size, block_size, N_vocab
         # idx and targets are both (B,T) tensor of integers
         tok_emb = self.token_embedding_table(idx) # (B,T,E)
         # pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,E)
@@ -275,7 +275,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     ### step 2: 取出数据
     gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu') # (N_vocab, n_embd), not pinned
     sta_emb     = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
-    train_emb   = torch.cat((train_cache['emb'][:train_length - vocab_size], sta_emb.pin_memory()), dim=0)  
+    train_emb   = torch.cat((train_cache['emb'][:train_length - N_vocab], sta_emb.pin_memory()), dim=0)  
                                                                                    # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
     valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory
@@ -333,7 +333,7 @@ if __name__ == "__main__":
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
-    train_cte(cache_ckpt, gpt_ckpt, train_length, 2048)
+    train_cte(cache_ckpt, gpt_ckpt, train_length, 4096)
     
     
     # validate_cte(

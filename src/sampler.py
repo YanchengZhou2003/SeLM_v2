@@ -151,34 +151,38 @@ import networkx as nx
 
 
 class Expander_Sampler(BaseSample):
-    def __init__(self, N_train: int, N_valid: int, N_dyn: int, N_sta: int, N_T: int,
-                 splits: List[Tuple[int, int]], 
-                 train_emb: torch.Tensor, valid_emb: torch.Tensor,
-                 S_dyn: int,
-                 S_val: int, T_val: int,
-                 main_device: torch.device,
-                 num_streams: int,
-                 use_eu_norm: bool = False):
+    def __init__(
+        self, 
+        N_train: int, N_vocab: int, N_valid: int,
+        T_train: int, T_vocab: int, T_valid: int,
+        N_trnbr: int, N_vonbr: int, N_vanbr: int,
+        T_trnbr: int, T_vonbr: int, T_vanbr: int,
+        train_slice : slice, vocab_slice: slice, valid_slice: slice,
+        train_splits: List[Tuple[int, int]], vocab_splits: List[Tuple[int, int]], valid_splits: List[Tuple[int, int]], 
+        train_emb: torch.Tensor, vocab_emb: torch.Tensor, valid_emb: torch.Tensor,
+        main_device: torch.device,
+        num_streams: int,
+        use_eu_norm: bool = False
+    ):
         """
         基于 d-正则随机图生成 Expander Graph.
         
         """
         super().__init__()
-        assert S_dyn < N_train, "度 c 必须小于节点总数 n"
-        if S_dyn & 1 != 0:
-            S_dyn = S_dyn + 1  # 如果 c 是奇数，增加到下一个偶数
-        self.N_train      = N_train
-        self.N_valid      = N_valid
-        self.N_dyn        = N_dyn
-        self.N_sta        = N_sta
-        self.N_T          = N_T
-        self.voc_slice    = slice(N_dyn, N_dyn + N_sta)
-        self.voc_emb      = train_emb[self.voc_slice].unsqueeze(0).repeat(self.N_T, 1, 1).to(main_device) # (T, N_sta, dim)
-        self.voc_nrm      = self.voc_emb.norm(p=2, dim=2, keepdim=True) if use_eu_norm else torch.full((self.N_T, self.N_sta, 1), 20.).to(main_device) # (T, N_sta, 1)
+        ### step.1 读取基本信息 ###
+        self.N_train, self.N_vocab, self.N_valid = N_train, N_vocab, N_valid
+        self.T_train, self.T_vocab, self.T_valid = T_train, T_vocab, T_valid
+        self.N_trnbr, self.N_vonbr, self.N_vanbr = N_trnbr, N_vonbr, N_vanbr
+        self.T_trnbr, self.T_vonbr, self.T_vanbr = T_trnbr, T_vonbr, T_vanbr
+        self.train_slice, self.vocab_slice, self.valid_slice = train_slice, vocab_slice, valid_slice
+        self.train_splits, self.vocab_splits, self.valid_splits = train_splits, vocab_splits, valid_splits
+        self.train_emb, self.vocab_emb, self.valid_emb = train_emb.to(main_device), vocab_emb.to(main_device), valid_emb.to(main_device)
         
-        self.splits       = splits
-        self.block4stream = [list(range(sid, len(self.splits), num_streams)) for sid in range(num_streams)] 
-        self.stream_ptr   = [0 for _ in range(num_streams)]
+        self.train_blk4stream = [list(range(sid, len(self.train_splits), num_streams)) for sid in range(num_streams)] 
+        self.train_ptr        = [0 for _ in range(num_streams)]
+        self.valid_blk4stream = [list(range(sid, len(self.valid_splits), num_streams)) for sid in range(num_streams)]
+        self.valid_ptr        = [0 for _ in range(num_streams)]
+        
         self.emb_val      = torch.cat([train_emb.to(main_device), valid_emb.to(main_device)], dim=0)
         self.emb_nrm      = self.emb_val.norm(p=2, dim=1, keepdim=True) if use_eu_norm else torch.full((self.emb_val.size(0), 1), 20.) # (N_train + N_valid, 1) 
         
@@ -202,7 +206,7 @@ class Expander_Sampler(BaseSample):
         self.main_locations = main_locations
     
     def new_epoch(self):
-        self.stream_ptr   = [0 for _ in range(self.num_streams)]
+        self.train_ptr   = [0 for _ in range(self.num_streams)]
     
     def generate_graph(self):
         """
@@ -298,15 +302,15 @@ class Expander_Sampler(BaseSample):
         Optional[Tuple[int, int]]   # nbr_block, 仅在 cur_type == "valid" 时有效
     ]:
         if cur_type == "train":
-            if self.stream_ptr[sid] < len(self.block4stream[sid]):
-                block_id = self.block4stream[sid][self.stream_ptr[sid]]
+            if self.train_ptr[sid] < len(self.train_blk4stream[sid]):
+                block_id = self.train_blk4stream[sid][self.train_ptr[sid]]
                 block    = self.splits[block_id]
-                self.stream_ptr[sid] += 1
+                self.train_ptr[sid] += 1
                 return block_id, block, 0, 0, None
             return None, None, None, None, None
         elif cur_type == "valid":
-            if self.stream_ptr[sid] < len(self.block4stream[sid]):
-                block_id = self.block4stream[sid][self.stream_ptr[sid]]
+            if self.train_ptr[sid] < len(self.train_blk4stream[sid]):
+                block_id = self.train_blk4stream[sid][self.train_ptr[sid]]
                 block    = self.splits[block_id]
                 nbr_blk_id = self.neighbor_ptr[sid]
                 nbr_block  = self.neighbor_blk[nbr_blk_id]
@@ -314,7 +318,7 @@ class Expander_Sampler(BaseSample):
                 self.neighbor_ptr[sid] += 1
                 if self.neighbor_ptr[sid] >= self.N_val_blk:
                     self.neighbor_ptr[sid] = 0
-                    self.stream_ptr[sid]  += 1
+                    self.train_ptr[sid]  += 1
             
                 return block_id, block, nbr_blk_id, self.N_val_blk - 1, nbr_block
             return None, None, None, None, None

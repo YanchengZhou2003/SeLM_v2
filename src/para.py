@@ -22,12 +22,24 @@ parser.add_argument("--cte_eval_bs"    , type=int,   default=32,   help="CTE eva
 parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE evaluation iterations")
 parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for") 
 parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
-parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
-parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
-parser.add_argument("--train_sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
+
+parser.add_argument("--N_train"           , type=int, default=65536, help="")
+parser.add_argument("--T_train"           , type=int, default=256,   help="")
+parser.add_argument("--N_train_neighbors" , type=int, default=512,   help="")
+parser.add_argument("--T_train_neighbors" , type=int, default=512,   help="")
+
+parser.add_argument("--N_vocab"           , type=int, default=-1,    help="该值不应该被指定")
+parser.add_argument("--T_vocab"           , type=int, default=-1,    help="该值不应该被指定")
+parser.add_argument("--N_vocab_neighbors" , type=int, default=-1,    help="该值不应该被指定")
+parser.add_argument("--T_vocab_neighbors" , type=int, default=512,   help="")
+
+parser.add_argument("--N_valid"           , type=int, default=8192,  help="")
+parser.add_argument("--T_valid"           , type=int, default=256,   help="")
+parser.add_argument("--N_valid_neighbors" , type=int, default=8192,  help="")
+parser.add_argument("--T_valid_neighbors" , type=int, default=512,   help="")
+
 parser.add_argument("--h" ,  type=int, default=27 , help="")
 parser.add_argument("--tp" ,  type=int, default=2 , help="")
-parser.add_argument("--instant_writeback" ,  type=int, default=0 , help="")
 parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
 parser.add_argument("--epoch_num" ,  type=int, default=5 , help="")
 parser.add_argument("--converge" ,   type=int, default=2 , help="")
@@ -35,8 +47,6 @@ parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
 parser.add_argument("--cur_portion" ,   type=float, default=0.5 , help="")
 parser.add_argument("--division_fact" ,   type=float, default=1.0 , help="")
-parser.add_argument("--N_VC" ,  type=int, default=4096 , help="")
-parser.add_argument("--N_VT" ,  type=int, default=256  , help="")
 parser.add_argument("--use_eu_norm" ,  type=int, default=256  , help="")
 
 args = parser.parse_args()
@@ -56,12 +66,21 @@ n_layer           = 6
 dropout           = 0.2
 
 
+N_train           = args.N_train           # 65536
+T_train           = args.T_train           # 256
+N_trnbr           = args.N_train_neighbors # 512
+T_trnbr           = args.T_train_neighbors # 512
+
+T_vonbr           = args.T_vocab_neighbors # 512
+
+N_valid           = args.N_valid           # 8192
+T_valid           = args.T_valid           # 256
+N_vanbr           = args.N_valid_neighbors # 8192
+T_vanbr           = args.T_valid_neighbors # 512
+
 h                 = args.h
 tp                = args.tp
 factor            = 1 
-train_sample_factor = args.train_sample_factor  # 1.0
-N_VC              = args.N_VC  # 4096
-N_VT              = args.N_VT  # 256
 eps               = 1e-5 
 division_fact     = 1.
 sample_k          = 1
@@ -80,10 +99,6 @@ cte_eval_iters    = args.cte_eval_iters  # 1
 cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
 cte_save_interval = 1
 
-
-N_T               = args.N_T
-
-train_length      = args.train_length  # 512
 
 loss_strategy: Dict = {
     'cos_loss'  : 'lap', # 
@@ -179,7 +194,7 @@ print(f"数据集总长度：{len(text)}")
 
 # here are all the unique characters that occur in this text
 chars = sorted(list(set(text)))
-vocab_size = len(chars)
+N_vocab = len(chars)
 
 # 额外内容
 gpt_path = './ckpt/gpt'

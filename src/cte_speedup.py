@@ -18,8 +18,11 @@ from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
 from src.loom_kernel_full import ct_loss_triton
 from src.loss import compute_loss, compute_weighted_loss
-from src.para import (ED, N_T, N_VC, N_VT, ST, cur_portion, cur_tp, generators,
-                      instant_writeback, n_embd, vocab_size, use_eu_norm)
+from src.para import (ED, ST, N_vocab, cur_portion, cur_tp,
+                      generators, instant_writeback, n_embd, use_eu_norm,
+                      T_train, N_trnbr, T_trnbr,
+                      T_vonbr,
+                      T_valid, N_vanbr, T_vanbr,)
 from src.sampler import BaseSample, Expander_Sampler, Prefetcher
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -125,11 +128,11 @@ class CritiGraph(torch.nn.Module):
         """
         device  = self.devices[dev_num]
         tot_lth = self.S_tot if cur_type == "train" else self.T_val
-        mask   = torch.ones((self.T, tot_lth), dtype=torch.bool, device=device)
+        mask   = torch.ones((self.T_train, tot_lth), dtype=torch.bool, device=device)
         Tl, Tr = block
         
         if not self.converge:
-            choosing_mask = (torch.rand((self.T,), device=device) > 0.2)  
+            choosing_mask = (torch.rand((self.T_train,), device=device) > 0.2)  
             sel_idx = (~choosing_mask).nonzero(as_tuple=False).squeeze(1)
             if sel_idx.numel() > 0:
                 cutoff = self.S_cos if cur_type == "train" else self.T_val
@@ -159,7 +162,7 @@ class CritiGraph(torch.nn.Module):
         device = self.devices[sid]
         
         # step1: 每个样本在 [0, tp) 之间随机生成一个排列（通过排序 trick）
-        rand_vals     = torch.rand((self.T, self.tp), device=device, generator=generators[sid]) # (T, D)
+        rand_vals     = torch.rand((self.T_train, self.tp), device=device, generator=generators[sid]) # (T, D)
         rand_cols     = rand_vals.argsort(dim=1)[:, :cur_tp]           # (T, cur_tp)
         # print(rand_cols[:4, :2])
         
@@ -171,8 +174,8 @@ class CritiGraph(torch.nn.Module):
 
         # step4: 高级索引直接填充
         # T_indices     = torch.arange(self.N_T,    device=device)[:, None]                # (T, 1)
-        t_idx = torch.arange(self.T, device=loss_tot.device)[:, None].expand(self.T, cur_tp)  # (T, upd)
-        t_mask = torch.rand(self.T, device=device, generator=generators[sid]) < cur_portion  # (T,)
+        t_idx = torch.arange(self.T_train, device=loss_tot.device)[:, None].expand(self.T_train, cur_tp)  # (T, upd)
+        t_mask = torch.rand(self.T_train, device=device, generator=generators[sid]) < cur_portion  # (T,)
         t_idx, rand_cols = t_idx[t_mask], rand_cols[t_mask]  # (T_upd, ), (T_upd, upd)
         
         cnc_indices[t_idx, rand_cols] = argmin_all[t_idx, rand_cols]
@@ -345,26 +348,18 @@ class CritiGraph(torch.nn.Module):
                         
                         
                         # self.timer.mark(f"dev{sid}_WRITE", 0)
-                        # print(f"at GPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cos: {loss_cos.mean().item():.4f}, loss_cro: {loss_cro.mean().item():.4f}, loss_tot: {loss_tot.mean().item():.4f}")
-                        # self.loc_splits  [block_id] = selected_locs
-                        # self.loss_cos_buf[block_id] = loss_cos
-                        # self.loss_cro_buf[block_id] = loss_cro
-                        # self.loss_tot_buf[block_id] = loss_tot
                         self.main_locations[block[0]:block[1]].copy_(selected_locs, non_blocking=True)
-                        self.loss_cos_buf[block[0]:block[1]].copy_(loss_cos, non_blocking=True)
+                        self.loss_cos_buf[block[0]:block[1]].copy_(loss_cos, non_blocking=True) # (T_sta, C, pos) 
                         self.loss_cro_buf[block[0]:block[1]].copy_(loss_cro, non_blocking=True)
                         self.loss_tot_buf[block[0]:block[1]].copy_(loss_tot, non_blocking=True)
-                        # print(block_id)
+                        
                         # 在当前 stream 上打一个事件
                         evt = torch.cuda.Event(enable_timing=False, blocking=False)
                         evt.record(stream)
 
                         # 保存引用（必须把三个张量都放进 tuple，不然会被回收）
                         self._pending_refs[sid].append(((selected_locs, loss_cos, loss_cro, loss_tot), evt))
-                        # print(f"at CPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cro: {self.loss_cro_buf[block[0]:block[1]].mean().item():.8f}. mask_sum: {mask.sum().item():.8f}")
-                        # print(f"at CPU, [sid={sid}] epoch {epoch} block {block_id}/{len(self.splits)} ({cur_type}), loss_cos: {self.loss_cos_buf[block[0]:block[1]].mean().item():.4f}, loss_cro: {self.loss_cro_buf[block[0]:block[1]].mean().item():.4f}, loss_tot: {self.loss_tot_buf[block[0]:block[1]].mean().item():.4f}")
-                        # self.timer.mark(f"dev{sid}_WRITE", 1)     
-                        # self.timer.mark(f"dev{sid}_ALL", 1)           
+    
                 
                 # print(f"[sid={sid}] epoch {epoch} reached barrier 2")
                 self.epoch_barrier.wait()
@@ -380,6 +375,7 @@ class CritiGraph(torch.nn.Module):
     def train_all(
         self,        
         train_emb : torch.Tensor, # (N_train, dim), pinned memory
+        vocab_emb : torch.Tensor, # (N_vocab, dim), pinned memory
         valid_emb : torch.Tensor, # (N_valid, dim), pinned memory
 
         train_tar : torch.Tensor, # (N_train, )   , pinned memory
@@ -389,45 +385,55 @@ class CritiGraph(torch.nn.Module):
         ### 以上张量全部放在 cpu，避免占用 gpu 内存
     ):  
         """
-        我们需要拟合的是一个：(N_train, N_train) 的矩阵，以及 (N_valid, N_train) 的矩阵
-        并且构造 (N_dyn, N_sta) 的 groundtruth，向它对齐
+        我们需要拟合的是一个:
+        1. 对于 train: (N_train, N_train) 的 cos-similarity, (N_train, N_vocab) 的 cross-entropy
+        2. 对于 vocab: (N_vocab, N_vocab) 的 cos-similarity, (N_vocab, N_train) 的 cross-entropy
+        3. 对于 valid: (N_valid, N_train) 的 cos-similarity, (N_valid, N_vocab) 的 ... 想得美，valid 怎么能看到 groundtruth 呢？
         """
         mark(ST, "all")
         mark(ST, "all_preparation")
         
         ### step 1: 获取基本信息，构造分块与采样
         mark(ST, "all_preparation_1")
-        self.T   = N_T
-        self.S_val = N_VC
-        self.T_val = N_VT
-        self.N_train, self.N_valid = train_emb.size(0), valid_emb.size(0)
-        self.N_dyn  , self.N_sta   = self.N_train - vocab_size, vocab_size
-        self.dyn_slice             = slice(0, self.N_dyn)
-        self.sta_slice             = slice(self.N_dyn, self.N_train)
-        assert self.N_train % N_T == 0 and self.N_valid % N_T == 0, f"N_train 和 N_valid 必须是 N_T 的整数倍，但现在是 {self.N_train}, {self.N_valid}, {N_T}"
-        train_splits = make_splits(0      , self.N_train          , N_T) 
-        valid_splits = make_splits(self.N_train, self.N_train + self.N_valid, N_T)
-        self.splits  = train_splits + valid_splits
+        ### step 1.1: 基本信息1，starting points 的大小以及分块大小
+        self.N_train, self.N_vocab, self.N_valid = train_emb.size(0), vocab_emb.size(0), valid_emb.size(0)
+        self.T_train, self.T_vocab, self.T_valid = T_train          , vocab_emb.size(0), T_valid
+        
+        ### step 1.2: 基本信息2：positive samples（可见邻居）的大小以及分块大小
+        self.N_trnbr = int(int(math.log2(self.N_train)) ** 2 * train_sample_factor)
+        self.N_vonbr = self.N_train
+        self.N_vanbr = N_vanbr # number of valid neighbors
+        self.T_trnbr = self.N_trnbr # 暂时不分块
+        self.T_vonbr = T_vonbr 
+        self.T_vanbr = T_vanbr
+        
+        ### step 1.3: 基本信息3：构建切片与分块
+        train_splits = make_splits(0                          , self.N_train               , self.T_train) 
+        vocab_splits = make_splits(self.N_train               , self.N_train + self.N_vocab, self.T_vocab)
+        valid_splits = make_splits(self.N_train + self.N_vocab, self.N_train + self.N_valid, self.T_valid)
+        
+        train_slice  = slice(0, self.N_train)
+        vocab_slice  = slice(self.N_train, self.N_train + self.N_vocab)
+        valid_slice  = slice(self.N_train + self.N_vocab, self.N_train + self.N_valid)
+        
+        trnbr_splits = make_splits(0, self.N_trnbr, self.T_trnbr)
+        vonbr_splits = make_splits(0, self.N_vonbr, self.T_vonbr)
+        vanbr_splits = make_splits(0, self.N_vanbr, self.T_vanbr)
+        
+        self.splits  = train_splits + vocab_splits + valid_splits
         mark(ED, "all_preparation_1", father="all_preparation")
         
         
         ### step.2 准备数据分块与采样器
         mark(ST, "all_preparation_2")
-        self.voc_emb    = [train_emb[self.sta_slice].unsqueeze(0).expand(self.T, -1, -1).to(dev) for dev in self.devices]
-        self.voc_loc    = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.T, -1, -1).to(dev) for dev in self.devices]
-        self.tar_splits = [
-            train_tar[block[0]:block[1]].to(i % self.num_devices) 
-                if block[0] < self.N_train else
-            valid_tar[block[0] - self.N_train:block[1] - self.N_train].to(i % self.num_devices) 
-                for i, block in enumerate(self.splits)
-        ]
+        self.train_tar  = [train_tar.to(dev) for dev in self.devices]
         
         self.sampler    = Expander_Sampler(
-            self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.T,
+            self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.T_train,
             self.splits,
             train_emb, valid_emb,
             int(int(math.log2(self.N_train)) ** 2 * train_sample_factor), 
-            self.S_val, self.T_val,
+            self.N_vnbrs, self.T_val,
             main_device,
             len(self.streams),
             use_eu_norm=use_eu_norm
@@ -509,7 +515,7 @@ class CritiGraph(torch.nn.Module):
             #     self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices])  
             #     for i, block in enumerate(self.splits)
             # ]
-            self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.T, -1, -1).to(dev) for dev in self.devices] # 如果出现 CUDA BUG，可以尝试把这行代码放到上面 epoch 循环的开头
+            self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.T_train, -1, -1).to(dev) for dev in self.devices] # 如果出现 CUDA BUG，可以尝试把这行代码放到上面 epoch 循环的开头
             self._pending_refs = {sid: [] for sid in range(self.num_devices)}
             
             self.sampler.update_locations(self.main_locations)
