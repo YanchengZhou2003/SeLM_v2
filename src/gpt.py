@@ -18,7 +18,7 @@ warnings.filterwarnings(
     message=r"You are using `torch\.load` with `weights_only=False`"
 )
 
-from src.cte_speedup import *
+from cte import *
 from src.para import *
 from src.utils import *
 from src.vis import *
@@ -32,13 +32,10 @@ decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integ
 # Train and test splits
 data = torch.tensor(encode(text), dtype=torch.long, pin_memory=True)
 text_size = len(data)
-# datai = torch.tensor([i * block_size for i in range(text_size)], dtype=torch.long)
 n = int(0.9*text_size) # first 90% will be train, rest val
 train_data = data[:n]
 val_data = data[n:]
 
-# Train Cache
-_train_cache = []
 
 # data loading
 def get_batch(split, bs=None, ix=None, to_cuda=False) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

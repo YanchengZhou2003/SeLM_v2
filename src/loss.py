@@ -200,3 +200,36 @@ def topk_accuracy(logits: torch.Tensor, targets: torch.Tensor, ks=(1,)):
         total = targets.numel()
         res[k] = hits / total
     return res
+
+
+import torch
+import torch.nn.functional as F
+
+def sampled_softmax_ce_uniform(logits: torch.Tensor, voc_dim: int, V: int) -> torch.Tensor:
+    """
+    logits: (..., k, ...)    未归一化 logits，其中 voc_dim 维度长度 = k
+    voc_dim: int             词表维度
+    V: int                   总词表大小
+    假设 logits 在 voc_dim 上 index=0 是正样本
+    """
+    k = logits.size(voc_dim)
+    device = logits.device
+
+    # 修正项（正样本不修正）
+    correction = torch.zeros(k, device=device)
+    correction[1:] = -torch.log(torch.tensor((k-1)/(V-1), device=device))
+
+    # reshape 以便广播
+    shape = [1] * logits.dim()
+    shape[voc_dim] = k
+    correction = correction.view(shape)
+
+    corrected_logits = logits + correction
+
+    # target index 全是 0
+    target_shape = list(logits.shape)
+    del target_shape[voc_dim]
+    target = torch.zeros(target_shape, dtype=torch.long, device=device)
+
+    loss = F.cross_entropy(corrected_logits, target, reduction="none")
+    return loss

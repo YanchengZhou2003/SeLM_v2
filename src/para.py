@@ -5,53 +5,61 @@ from typing import Dict, Optional
 
 import torch
 
-# def handler(sig, frame):
-#     print("SIGINT received, force exit.")
-#     os._exit(1)
-
-# signal.signal(signal.SIGINT, handler)
-
+from src.utils import make_splits
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+main_device = torch.device('cuda:0')
+devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
+num_devices = len(devices)
 
-# Parse command-line arguments
+comp_streams = [torch.cuda.default_stream(i) for i in range(torch.cuda.device_count())]
+data_streams = [torch.cuda.Stream(0) for _ in range(torch.cuda.device_count())]
+
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
-parser.add_argument("--cte_train_bs"   , type=int,   default=32,   help="CTE training batch size")
-parser.add_argument("--cte_train_iters", type=int,   default=1,    help="CTE training iterations")
-parser.add_argument("--cte_eval_bs"    , type=int,   default=32,   help="CTE evaluation batch size")
-parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE evaluation iterations")
-parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for") 
-parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
+### 1. GPT 训练相关参数
+parser.add_argument("--cte_train_bs"      , type=int,   default=32,    help="")
+parser.add_argument("--cte_train_iters"   , type=int,   default=1,     help="")
+parser.add_argument("--cte_eval_bs"       , type=int,   default=32,    help="")
+parser.add_argument("--cte_eval_iters"    , type=int,   default=1,     help="")
 
-parser.add_argument("--N_train"           , type=int, default=65536, help="")
-parser.add_argument("--T_train"           , type=int, default=256,   help="")
-parser.add_argument("--N_train_neighbors" , type=int, default=512,   help="")
-parser.add_argument("--T_train_neighbors" , type=int, default=512,   help="")
+parser.add_argument("--N_train"           , type=int,   default=65536, help="")
+parser.add_argument("--T_train"           , type=int,   default=256,   help="")
+parser.add_argument("--N_train_neighbors" , type=int,   default=512,   help="")
 
-parser.add_argument("--N_vocab"           , type=int, default=-1,    help="该值不应该被指定")
-parser.add_argument("--T_vocab"           , type=int, default=-1,    help="该值不应该被指定")
-parser.add_argument("--N_vocab_neighbors" , type=int, default=-1,    help="该值不应该被指定")
-parser.add_argument("--T_vocab_neighbors" , type=int, default=512,   help="")
+parser.add_argument("--K_vocab"           , type=int,   default=512,   help="")
+parser.add_argument("--T_vocab_neighbors" , type=int,   default=512,   help="")
 
-parser.add_argument("--N_valid"           , type=int, default=8192,  help="")
-parser.add_argument("--T_valid"           , type=int, default=256,   help="")
-parser.add_argument("--N_valid_neighbors" , type=int, default=8192,  help="")
-parser.add_argument("--T_valid_neighbors" , type=int, default=512,   help="")
+parser.add_argument("--N_valid"           , type=int,   default=8192,  help="")
+parser.add_argument("--T_valid"           , type=int,   default=256,   help="")
+parser.add_argument("--N_valid_neighbors" , type=int,   default=8192,  help="")
 
-parser.add_argument("--h" ,  type=int, default=27 , help="")
-parser.add_argument("--tp" ,  type=int, default=2 , help="")
-parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
-parser.add_argument("--epoch_num" ,  type=int, default=5 , help="")
-parser.add_argument("--converge" ,   type=int, default=2 , help="")
-parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
-parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
-parser.add_argument("--cur_portion" ,   type=float, default=0.5 , help="")
-parser.add_argument("--division_fact" ,   type=float, default=1.0 , help="")
-parser.add_argument("--use_eu_norm" ,  type=int, default=256  , help="")
+parser.add_argument("--h"                 , type=int,   default=27 ,   help="")
+parser.add_argument("--tp"                , type=int,   default=2 ,    help="")
+parser.add_argument("--cur_tp"            , type=int,   default=2 ,    help="")
+parser.add_argument("--cur_portion"       , type=float, default=0.5 ,  help="")
+parser.add_argument("--division_fact"     , type=float, default=1.0 ,  help="")
+
+parser.add_argument("--train_epoch_num"   , type=int,   default=5 ,    help="")
+parser.add_argument("--valid_epoch_num"   , type=int,   default=5 ,    help="")
+parser.add_argument("--ratio_cos"         , type=float, default=0.95,  help="") 
+parser.add_argument("--ratio_cro"         , type=float, default=0.05,  help="")
+parser.add_argument("--train_converge"    , type=int,   default=2 ,    help="")
+parser.add_argument("--valid_converge"    , type=int,   default=2 ,    help="")
+parser.add_argument("--train_graph_reset" , type=int,   default=50,    help="")
+parser.add_argument("--valid_graph_reset" , type=int,   default=50,    help="")
+
+parser.add_argument("--vis_path"          , type=str,   default='./vis2/tmp' , help="")
+parser.add_argument("--use_eu_norm"       , type=int,   default=256  , help="")
 
 args = parser.parse_args()
 
-# hyperparameters
+# wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
+with open('./data/input.txt', 'r', encoding='utf-8') as f:
+    text = f.read()
+chars = sorted(list(set(text)))
+N_vocab = len(chars)
+
+# 超参数：GPT
 batch_size        = 64    
 block_size        = 256
 max_iters         = 4000
@@ -65,32 +73,7 @@ n_head            = 6
 n_layer           = 6
 dropout           = 0.2
 
-
-N_train           = args.N_train           # 65536
-T_train           = args.T_train           # 256
-N_trnbr           = args.N_train_neighbors # 512
-T_trnbr           = args.T_train_neighbors # 512
-
-T_vonbr           = args.T_vocab_neighbors # 512
-
-N_valid           = args.N_valid           # 8192
-T_valid           = args.T_valid           # 256
-N_vanbr           = args.N_valid_neighbors # 8192
-T_vanbr           = args.T_valid_neighbors # 512
-
-h                 = args.h
-tp                = args.tp
-factor            = 1 
-eps               = 1e-5 
-division_fact     = 1.
-sample_k          = 1
-instant_writeback = args.instant_writeback  # 1
-cur_tp            = args.cur_tp  # 2
-cur_portion       = args.cur_portion  # 0.5
-use_eu_norm       = args.use_eu_norm  # 1
-
-### 这里要实验至少 6 个量级, bs = 1, 2, 4, 8, 16, 32, 64
-### 最少：1 * 10 * 256 = 2,560, 最多：64 * 10 * 256 = 163,840
+# 超参数：GPT 产生给 CTE 训练的数据
 cte_train_bs      = args.cte_train_bs    # 64
 cte_train_iters   = args.cte_train_iters # 5
 cte_train_samples = cte_train_bs * cte_train_iters * block_size # 64 * 5 * 256 = 81,920
@@ -99,7 +82,53 @@ cte_eval_iters    = args.cte_eval_iters  # 1
 cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
 cte_save_interval = 1
 
+# 超参数：CTE
+h                 = args.h
+n                 = 2 ** h
+tp                = args.tp
+factor            = 1 
+eps               = 1e-5 
 
+sample_k          = 1
+instant_writeback = args.instant_writeback  # 1
+cur_tp            = args.cur_tp  # 2
+cur_portion       = args.cur_portion  # 0.5
+use_eu_norm       = args.use_eu_norm  # 1
+
+# 超参数：数据集，及其分块
+N_train           = args.N_train           # 65536
+T_train           = args.T_train           # 256
+N_trnbr           = args.N_train_neighbors # 512
+
+T_vonbr           = args.T_vocab_neighbors # 512
+K_vocab           = N_vocab                # 暂时不采样
+
+N_valid           = args.N_valid           # 8192
+T_valid           = args.T_valid           # 256
+N_vanbr           = args.N_valid_neighbors # 8192
+
+emb_size          = N_train + N_vocab + N_valid
+
+train_blocks      = make_splits(0, N_train, T_train) 
+vonbr_blocks      = make_splits(0, N_train, T_vonbr)
+valid_blocks      = make_splits(N_train + N_vocab, N_train + N_vocab + N_valid, T_valid)
+
+train_loc_slice   = slice(0, N_train)
+vocab_loc_slice   = slice(N_train, N_train + N_vocab)
+valid_loc_slice   = slice(N_train + N_vocab, N_train + N_vocab + N_valid)    
+
+num_train_blocks  = len(train_blocks)
+num_vonbr_blocks  = len(vonbr_blocks)
+num_valid_blocks  = len(valid_blocks)
+
+train4sid         = [list(range(sid, num_train_blocks, num_devices)) for sid in range(num_devices)]
+vonbr4sid         = [list(range(sid, num_vonbr_blocks, num_devices)) for sid in range(num_devices)]
+valid4sid         = [list(range(sid, num_valid_blocks, num_devices)) for sid in range(num_devices)]
+
+
+
+
+# 超参数：训练相关
 loss_strategy: Dict = {
     'cos_loss'  : 'lap', # 
     'cro_loss'  : 'cro', # 
@@ -107,42 +136,19 @@ loss_strategy: Dict = {
     'ratio_cos' : args.ratio_cos,  
     'ratio_cro' : args.ratio_cro    
 }
-epoch_num=args.epoch_num  # 50
+train_epoch_num = args.train_epoch_num # 5
+valid_epoch_num = args.valid_epoch_num # 5
+train_converge  = args.train_converge  # 2
+valid_converge  = args.valid_converge  # 2
+
+division_fact   = args.division_fact   # 1.0
+N_K             = int(h / division_fact)
+N_C             = 2 * N_K * h + 1
+
+
+
 generators = {}
 
-
-'''
-这个拟合效果比较好, loss 还低
-loss_type: LossTypeDict = {
-    'dyn_loss'  : 'lap', # dyn:  dynamic
-    'sta_loss'  : 'square', # sta:  static
-    'prob_loss' : 'js' ,    # prob: probability
-    30: {
-        'target'  : 'sta_only' , 
-        'converge': 20
-    }, # 50  < epoch <= 100 时仅优化 sta_loss，在第 80 个 epoch 开始 converge
-    150: {
-        'target'  : 'weighted_dyn_prob',
-        'converge': 80,
-        'ratio_dyn' : 0.99,
-        'ratio_prob': 0.01   
-    }
-}
-epoch_cte=150
-'''
-
-
-### dyn_loss / sta_loss 可选: 'abs', 'square'
-### prob_loss 可选: 'kl' , 'js'
-### method    可选: 
-##### 'name': 'dyn_only'  , 表示当前仅优化 dyn_loss， 其它 loss 只计算、不优化
-##### 'name': 'sta_only'  , 表示当前仅优化 sta_loss， 其它 loss 只计算、不优化
-##### 'name': 'prob_only' , 表示当前仅优化 prob_loss，其它 loss 只计算、不优化
-##### 'name': 'alternated', 表示交替优化, 一个 epoch 依次优化 dyn / sta / prob
-##### 'name': 'weighted_dyn_prob'  , 表示加权优化. 需要额外指定 'ratio_dyn' 和 'ratio_prob', 且它们加和为 1
-
-
-# ------------
 
 def set_seed(seed: int = 42, deterministic: bool = True, benchmark: bool = False) -> None:
     """
@@ -185,32 +191,17 @@ def set_seed(seed: int = 42, deterministic: bool = True, benchmark: bool = False
 
 set_seed(42, deterministic=True, benchmark=False)
 
-# wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-with open('./data/input.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
-
 
 print(f"数据集总长度：{len(text)}")
 
-# here are all the unique characters that occur in this text
-chars = sorted(list(set(text)))
-N_vocab = len(chars)
 
 # 额外内容
-gpt_path = './ckpt/gpt'
-cte_path = './ckpt/cte'
-cache_path = './data/'
+gpt_path         = './ckpt/gpt'
+cte_path         = './ckpt/cte'
+cache_path       = './data/'
 train_cache_path = './ckpt/cte'
-vis_path = args.vis_path
+vis_path         = args.vis_path
 os.makedirs(vis_path, exist_ok=True)
-
-
-
-
-
-
-
-
 
 ST = False
 ED = True
