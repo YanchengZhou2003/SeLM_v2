@@ -1,128 +1,525 @@
 数据集总长度：1115394
 Before CTE Training: train eu loss: 1.1381539106369019, eval eu loss: 1.4524140357971191
 Before CTE Training: train eu acc: 0.63623046875, eval eu acc: 0.5721435546875
-epoch   0 summary: valid_cos_loss : 0.026380, valid loss: 4.1930, accuracy: 0.0425
-epoch   1 summary: valid_cos_loss : 0.024614, valid loss: 4.1083, accuracy: 0.0616
-epoch   2 summary: valid_cos_loss : 0.023799, valid loss: 4.0302, accuracy: 0.0806
-epoch   3 summary: valid_cos_loss : 0.022246, valid loss: 3.9540, accuracy: 0.1019
-epoch   4 summary: valid_cos_loss : 0.021784, valid loss: 3.8776, accuracy: 0.1232
-epoch   5 summary: valid_cos_loss : 0.020288, valid loss: 3.8056, accuracy: 0.1475
-epoch   6 summary: valid_cos_loss : 0.018872, valid loss: 3.7445, accuracy: 0.1636
-epoch   7 summary: valid_cos_loss : 0.017799, valid loss: 3.6808, accuracy: 0.1788
-epoch   8 summary: valid_cos_loss : 0.017617, valid loss: 3.6283, accuracy: 0.1906
-epoch   9 summary: valid_cos_loss : 0.015974, valid loss: 3.5708, accuracy: 0.2032
-epoch  10 summary: valid_cos_loss : 0.015247, valid loss: 3.5196, accuracy: 0.2139
-epoch  11 summary: valid_cos_loss : 0.014471, valid loss: 3.4728, accuracy: 0.2262
-epoch  12 summary: valid_cos_loss : 0.013715, valid loss: 3.4300, accuracy: 0.2407
-epoch  13 summary: valid_cos_loss : 0.013109, valid loss: 3.3869, accuracy: 0.2488
-epoch  14 summary: valid_cos_loss : 0.012876, valid loss: 3.3494, accuracy: 0.2574
-epoch  15 summary: valid_cos_loss : 0.012279, valid loss: 3.3177, accuracy: 0.2590
-epoch  16 summary: valid_cos_loss : 0.011473, valid loss: 3.2843, accuracy: 0.2676
-epoch  17 summary: valid_cos_loss : 0.010930, valid loss: 3.2496, accuracy: 0.2726
-epoch  18 summary: valid_cos_loss : 0.010206, valid loss: 3.2188, accuracy: 0.2765
-epoch  19 summary: valid_cos_loss : 0.009810, valid loss: 3.1858, accuracy: 0.2855
-epoch  20 summary: valid_cos_loss : 0.009697, valid loss: 3.1624, accuracy: 0.2882
-epoch  21 summary: valid_cos_loss : 0.009091, valid loss: 3.1313, accuracy: 0.2917
-epoch  22 summary: valid_cos_loss : 0.008572, valid loss: 3.1061, accuracy: 0.2974
-epoch  23 summary: valid_cos_loss : 0.008101, valid loss: 3.0846, accuracy: 0.2996
-epoch  24 summary: valid_cos_loss : 0.008099, valid loss: 3.0616, accuracy: 0.3011
-epoch  25 summary: valid_cos_loss : 0.008109, valid loss: 3.0395, accuracy: 0.3079
-epoch  26 summary: valid_cos_loss : 0.007441, valid loss: 3.0209, accuracy: 0.3101
-epoch  27 summary: valid_cos_loss : 0.007028, valid loss: 3.0074, accuracy: 0.3120
-epoch  28 summary: valid_cos_loss : 0.006846, valid loss: 2.9856, accuracy: 0.3146
-epoch  29 summary: valid_cos_loss : 0.006660, valid loss: 2.9713, accuracy: 0.3140
-epoch  30 summary: valid_cos_loss : 0.006392, valid loss: 2.9553, accuracy: 0.3158
-epoch  31 summary: valid_cos_loss : 0.006240, valid loss: 2.9400, accuracy: 0.3204
-epoch  32 summary: valid_cos_loss : 0.005952, valid loss: 2.9229, accuracy: 0.3224
-epoch  33 summary: valid_cos_loss : 0.005657, valid loss: 2.9085, accuracy: 0.3263
-epoch  34 summary: valid_cos_loss : 0.005430, valid loss: 2.8911, accuracy: 0.3287
-epoch  35 summary: valid_cos_loss : 0.005405, valid loss: 2.8780, accuracy: 0.3311
-epoch  36 summary: valid_cos_loss : 0.005193, valid loss: 2.8681, accuracy: 0.3315
-epoch  37 summary: valid_cos_loss : 0.005075, valid loss: 2.8567, accuracy: 0.3313
-epoch  38 summary: valid_cos_loss : 0.004981, valid loss: 2.8417, accuracy: 0.3372
-epoch  39 summary: valid_cos_loss : 0.004699, valid loss: 2.8330, accuracy: 0.3389
-epoch  40 summary: valid_cos_loss : 0.004474, valid loss: 2.8251, accuracy: 0.3397
-epoch  41 summary: valid_cos_loss : 0.004444, valid loss: 2.8179, accuracy: 0.3412
-epoch  42 summary: valid_cos_loss : 0.004376, valid loss: 2.8087, accuracy: 0.3425
-epoch  43 summary: valid_cos_loss : 0.004393, valid loss: 2.8027, accuracy: 0.3444
-epoch  44 summary: valid_cos_loss : 0.004137, valid loss: 2.7934, accuracy: 0.3458
-epoch  45 summary: valid_cos_loss : 0.004040, valid loss: 2.7853, accuracy: 0.3448
-epoch  46 summary: valid_cos_loss : 0.004064, valid loss: 2.7769, accuracy: 0.3481
-epoch  47 summary: valid_cos_loss : 0.003880, valid loss: 2.7728, accuracy: 0.3488
-epoch  48 summary: valid_cos_loss : 0.003974, valid loss: 2.7675, accuracy: 0.3490
-epoch  49 summary: valid_cos_loss : 0.003698, valid loss: 2.7584, accuracy: 0.3519
-epoch  50 summary: valid_cos_loss : 0.003761, valid loss: 2.7404, accuracy: 0.3558
-epoch  51 summary: valid_cos_loss : 0.003538, valid loss: 2.7217, accuracy: 0.3585
-epoch  52 summary: valid_cos_loss : 0.003328, valid loss: 2.7033, accuracy: 0.3589
-epoch  53 summary: valid_cos_loss : 0.003134, valid loss: 2.6840, accuracy: 0.3627
-epoch  54 summary: valid_cos_loss : 0.002960, valid loss: 2.6647, accuracy: 0.3677
-epoch  55 summary: valid_cos_loss : 0.002796, valid loss: 2.6479, accuracy: 0.3699
-epoch  56 summary: valid_cos_loss : 0.002649, valid loss: 2.6332, accuracy: 0.3699
-epoch  57 summary: valid_cos_loss : 0.002507, valid loss: 2.6165, accuracy: 0.3728
-epoch  58 summary: valid_cos_loss : 0.002381, valid loss: 2.5995, accuracy: 0.3752
-epoch  59 summary: valid_cos_loss : 0.002258, valid loss: 2.5894, accuracy: 0.3779
-epoch  60 summary: valid_cos_loss : 0.002146, valid loss: 2.5747, accuracy: 0.3811
-epoch  61 summary: valid_cos_loss : 0.002042, valid loss: 2.5596, accuracy: 0.3839
-epoch  62 summary: valid_cos_loss : 0.001942, valid loss: 2.5496, accuracy: 0.3862
-epoch  63 summary: valid_cos_loss : 0.001856, valid loss: 2.5374, accuracy: 0.3870
-epoch  64 summary: valid_cos_loss : 0.001770, valid loss: 2.5242, accuracy: 0.3917
-epoch  65 summary: valid_cos_loss : 0.001697, valid loss: 2.5130, accuracy: 0.3937
-epoch  66 summary: valid_cos_loss : 0.001626, valid loss: 2.5035, accuracy: 0.3945
-epoch  67 summary: valid_cos_loss : 0.001559, valid loss: 2.4913, accuracy: 0.3956
-epoch  68 summary: valid_cos_loss : 0.001495, valid loss: 2.4812, accuracy: 0.3978
-epoch  69 summary: valid_cos_loss : 0.001438, valid loss: 2.4704, accuracy: 0.4004
-epoch  70 summary: valid_cos_loss : 0.001385, valid loss: 2.4604, accuracy: 0.4019
-epoch  71 summary: valid_cos_loss : 0.001335, valid loss: 2.4506, accuracy: 0.4032
-epoch  72 summary: valid_cos_loss : 0.001285, valid loss: 2.4446, accuracy: 0.4059
-epoch  73 summary: valid_cos_loss : 0.001241, valid loss: 2.4369, accuracy: 0.4072
-epoch  74 summary: valid_cos_loss : 0.001200, valid loss: 2.4289, accuracy: 0.4077
-epoch  75 summary: valid_cos_loss : 0.001264, valid loss: 2.4207, accuracy: 0.4126
-epoch  76 summary: valid_cos_loss : 0.001223, valid loss: 2.4151, accuracy: 0.4131
-epoch  77 summary: valid_cos_loss : 0.001187, valid loss: 2.4076, accuracy: 0.4148
-Traceback (most recent call last):
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
-    exec(code, run_globals)
-  File "/home/yancheng/SeLM_v2/src/gpt.py", line 328, in <module>
-    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
-    return func(*args, **kwargs)
-  File "/home/yancheng/SeLM_v2/src/gpt.py", line 305, in train_cte
-    cte.test_time_train_all(
-  File "/home/yancheng/SeLM_v2/src/gettime.py", line 118, in wrapper
-    return fn(*args, **kwargs)
-  File "/home/yancheng/SeLM_v2/src/cte.py", line 745, in test_time_train_all
-    self.epoch_barrier.wait()          # 第二阶段：整合数据
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 668, in wait
-    self._wait(timeout)
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 703, in _wait
-    if not self._cond.wait_for(lambda : self._state != 0, timeout):
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 355, in wait_for
-    self.wait(waittime)
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 320, in wait
-    waiter.acquire()
-KeyboardInterrupt
-Exception ignored in: <module 'threading' from '/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py'>
-Traceback (most recent call last):
-  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 1567, in _shutdown
-    lock.acquire()
-KeyboardInterrupt: 
-all_preparation                745.856ms
-all_preparation_2              743.909ms
-all_preparation_3                1.908ms
-epoch                         1458.284ms
-epoch_pos_train                  0.492ms
-epoch_preparation                0.132ms
-epoch_train                   1382.639ms
-epoch_valid                     74.867ms
+epoch   0 summary: valid_cos_loss : 0.025821, valid loss: 4.1932, accuracy: 0.0394
+epoch   1 summary: valid_cos_loss : 0.025005, valid loss: 4.1103, accuracy: 0.0585
+epoch   2 summary: valid_cos_loss : 0.023455, valid loss: 4.0316, accuracy: 0.0814
+epoch   3 summary: valid_cos_loss : 0.022119, valid loss: 3.9580, accuracy: 0.1034
+epoch   4 summary: valid_cos_loss : 0.021617, valid loss: 3.8905, accuracy: 0.1205
+epoch   5 summary: valid_cos_loss : 0.020082, valid loss: 3.8214, accuracy: 0.1384
+epoch   6 summary: valid_cos_loss : 0.019157, valid loss: 3.7570, accuracy: 0.1561
+epoch   7 summary: valid_cos_loss : 0.017933, valid loss: 3.6985, accuracy: 0.1724
+epoch   8 summary: valid_cos_loss : 0.017641, valid loss: 3.6420, accuracy: 0.1876
+epoch   9 summary: valid_cos_loss : 0.016064, valid loss: 3.5839, accuracy: 0.2023
+epoch  10 summary: valid_cos_loss : 0.015677, valid loss: 3.5337, accuracy: 0.2156
+epoch  11 summary: valid_cos_loss : 0.015032, valid loss: 3.4862, accuracy: 0.2267
+epoch  12 summary: valid_cos_loss : 0.013858, valid loss: 3.4414, accuracy: 0.2405
+epoch  13 summary: valid_cos_loss : 0.013097, valid loss: 3.4021, accuracy: 0.2491
+epoch  14 summary: valid_cos_loss : 0.012661, valid loss: 3.3619, accuracy: 0.2548
+epoch  15 summary: valid_cos_loss : 0.011908, valid loss: 3.3245, accuracy: 0.2604
+epoch  16 summary: valid_cos_loss : 0.011689, valid loss: 3.2893, accuracy: 0.2665
+epoch  17 summary: valid_cos_loss : 0.010843, valid loss: 3.2510, accuracy: 0.2731
+epoch  18 summary: valid_cos_loss : 0.010818, valid loss: 3.2201, accuracy: 0.2808
+epoch  19 summary: valid_cos_loss : 0.009888, valid loss: 3.1884, accuracy: 0.2860
+epoch  20 summary: valid_cos_loss : 0.009382, valid loss: 3.1606, accuracy: 0.2883
+epoch  21 summary: valid_cos_loss : 0.009064, valid loss: 3.1312, accuracy: 0.2935
+epoch  22 summary: valid_cos_loss : 0.009080, valid loss: 3.1033, accuracy: 0.2986
+epoch  23 summary: valid_cos_loss : 0.008139, valid loss: 3.0804, accuracy: 0.3043
+epoch  24 summary: valid_cos_loss : 0.008012, valid loss: 3.0539, accuracy: 0.3099
+epoch  25 summary: valid_cos_loss : 0.007830, valid loss: 3.0312, accuracy: 0.3136
+epoch  26 summary: valid_cos_loss : 0.007273, valid loss: 3.0134, accuracy: 0.3157
+epoch  27 summary: valid_cos_loss : 0.007081, valid loss: 2.9912, accuracy: 0.3160
+epoch  28 summary: valid_cos_loss : 0.006974, valid loss: 2.9692, accuracy: 0.3153
+epoch  29 summary: valid_cos_loss : 0.006626, valid loss: 2.9518, accuracy: 0.3165
+epoch  30 summary: valid_cos_loss : 0.006666, valid loss: 2.9323, accuracy: 0.3217
+epoch  31 summary: valid_cos_loss : 0.006218, valid loss: 2.9175, accuracy: 0.3250
+epoch  32 summary: valid_cos_loss : 0.005975, valid loss: 2.9030, accuracy: 0.3304
+epoch  33 summary: valid_cos_loss : 0.005578, valid loss: 2.8880, accuracy: 0.3322
+epoch  34 summary: valid_cos_loss : 0.005493, valid loss: 2.8728, accuracy: 0.3368
+epoch  35 summary: valid_cos_loss : 0.005488, valid loss: 2.8610, accuracy: 0.3396
+epoch  36 summary: valid_cos_loss : 0.005156, valid loss: 2.8486, accuracy: 0.3405
+epoch  37 summary: valid_cos_loss : 0.005001, valid loss: 2.8378, accuracy: 0.3411
+epoch  38 summary: valid_cos_loss : 0.004861, valid loss: 2.8270, accuracy: 0.3438
+epoch  39 summary: valid_cos_loss : 0.004631, valid loss: 2.8163, accuracy: 0.3450
+epoch  40 summary: valid_cos_loss : 0.004655, valid loss: 2.8075, accuracy: 0.3457
+epoch  41 summary: valid_cos_loss : 0.004602, valid loss: 2.7974, accuracy: 0.3469
+epoch  42 summary: valid_cos_loss : 0.004560, valid loss: 2.7874, accuracy: 0.3485
+epoch  43 summary: valid_cos_loss : 0.004314, valid loss: 2.7753, accuracy: 0.3511
+epoch  44 summary: valid_cos_loss : 0.004159, valid loss: 2.7687, accuracy: 0.3534
+epoch  45 summary: valid_cos_loss : 0.004043, valid loss: 2.7554, accuracy: 0.3562
+epoch  46 summary: valid_cos_loss : 0.003927, valid loss: 2.7510, accuracy: 0.3590
+epoch  47 summary: valid_cos_loss : 0.003929, valid loss: 2.7400, accuracy: 0.3601
+epoch  48 summary: valid_cos_loss : 0.003644, valid loss: 2.7305, accuracy: 0.3606
+epoch  49 summary: valid_cos_loss : 0.003727, valid loss: 2.7231, accuracy: 0.3641
+epoch  50 summary: valid_cos_loss : 0.003620, valid loss: 2.7031, accuracy: 0.3649
+epoch  51 summary: valid_cos_loss : 0.003404, valid loss: 2.6860, accuracy: 0.3672
+epoch  52 summary: valid_cos_loss : 0.003209, valid loss: 2.6676, accuracy: 0.3699
+epoch  53 summary: valid_cos_loss : 0.003027, valid loss: 2.6501, accuracy: 0.3712
+epoch  54 summary: valid_cos_loss : 0.002871, valid loss: 2.6328, accuracy: 0.3751
+epoch  55 summary: valid_cos_loss : 0.002720, valid loss: 2.6172, accuracy: 0.3757
+epoch  56 summary: valid_cos_loss : 0.002575, valid loss: 2.5997, accuracy: 0.3784
+epoch  57 summary: valid_cos_loss : 0.002439, valid loss: 2.5840, accuracy: 0.3832
+epoch  58 summary: valid_cos_loss : 0.002312, valid loss: 2.5683, accuracy: 0.3844
+epoch  59 summary: valid_cos_loss : 0.002200, valid loss: 2.5538, accuracy: 0.3882
+epoch  60 summary: valid_cos_loss : 0.002127, valid loss: 2.5399, accuracy: 0.3915
+epoch  61 summary: valid_cos_loss : 0.002028, valid loss: 2.5258, accuracy: 0.3939
+epoch  62 summary: valid_cos_loss : 0.001937, valid loss: 2.5117, accuracy: 0.3948
+epoch  63 summary: valid_cos_loss : 0.001850, valid loss: 2.5003, accuracy: 0.3971
+epoch  64 summary: valid_cos_loss : 0.001772, valid loss: 2.4909, accuracy: 0.3988
+epoch  65 summary: valid_cos_loss : 0.001697, valid loss: 2.4788, accuracy: 0.3988
+epoch  66 summary: valid_cos_loss : 0.001629, valid loss: 2.4662, accuracy: 0.4016
+epoch  67 summary: valid_cos_loss : 0.001567, valid loss: 2.4568, accuracy: 0.4042
+epoch  68 summary: valid_cos_loss : 0.001510, valid loss: 2.4470, accuracy: 0.4045
+epoch  69 summary: valid_cos_loss : 0.001455, valid loss: 2.4384, accuracy: 0.4067
+epoch  70 summary: valid_cos_loss : 0.001436, valid loss: 2.4292, accuracy: 0.4091
+epoch  71 summary: valid_cos_loss : 0.001387, valid loss: 2.4199, accuracy: 0.4124
+epoch  72 summary: valid_cos_loss : 0.001341, valid loss: 2.4120, accuracy: 0.4152
+epoch  73 summary: valid_cos_loss : 0.001298, valid loss: 2.4006, accuracy: 0.4191
+epoch  74 summary: valid_cos_loss : 0.001253, valid loss: 2.3910, accuracy: 0.4189
+epoch  75 summary: valid_cos_loss : 0.001215, valid loss: 2.3825, accuracy: 0.4207
+epoch  76 summary: valid_cos_loss : 0.001182, valid loss: 2.3753, accuracy: 0.4211
+epoch  77 summary: valid_cos_loss : 0.001148, valid loss: 2.3677, accuracy: 0.4224
+epoch  78 summary: valid_cos_loss : 0.001116, valid loss: 2.3603, accuracy: 0.4238
+epoch  79 summary: valid_cos_loss : 0.001086, valid loss: 2.3532, accuracy: 0.4246
+epoch  80 summary: valid_cos_loss : 0.001080, valid loss: 2.3479, accuracy: 0.4241
+epoch  81 summary: valid_cos_loss : 0.001052, valid loss: 2.3408, accuracy: 0.4244
+epoch  82 summary: valid_cos_loss : 0.001027, valid loss: 2.3340, accuracy: 0.4259
+epoch  83 summary: valid_cos_loss : 0.001004, valid loss: 2.3294, accuracy: 0.4266
+epoch  84 summary: valid_cos_loss : 0.000981, valid loss: 2.3249, accuracy: 0.4293
+epoch  85 summary: valid_cos_loss : 0.000960, valid loss: 2.3189, accuracy: 0.4296
+epoch  86 summary: valid_cos_loss : 0.000941, valid loss: 2.3146, accuracy: 0.4314
+epoch  87 summary: valid_cos_loss : 0.000923, valid loss: 2.3086, accuracy: 0.4321
+epoch  88 summary: valid_cos_loss : 0.000905, valid loss: 2.3041, accuracy: 0.4308
+epoch  89 summary: valid_cos_loss : 0.000888, valid loss: 2.3002, accuracy: 0.4321
+epoch  90 summary: valid_cos_loss : 0.000904, valid loss: 2.2945, accuracy: 0.4340
+epoch  91 summary: valid_cos_loss : 0.000888, valid loss: 2.2907, accuracy: 0.4362
+epoch  92 summary: valid_cos_loss : 0.000872, valid loss: 2.2866, accuracy: 0.4381
+epoch  93 summary: valid_cos_loss : 0.000858, valid loss: 2.2812, accuracy: 0.4382
+epoch  94 summary: valid_cos_loss : 0.000846, valid loss: 2.2774, accuracy: 0.4390
+epoch  95 summary: valid_cos_loss : 0.000834, valid loss: 2.2740, accuracy: 0.4398
+epoch  96 summary: valid_cos_loss : 0.000822, valid loss: 2.2701, accuracy: 0.4408
+epoch  97 summary: valid_cos_loss : 0.000811, valid loss: 2.2660, accuracy: 0.4426
+epoch  98 summary: valid_cos_loss : 0.000801, valid loss: 2.2619, accuracy: 0.4414
+epoch  99 summary: valid_cos_loss : 0.000791, valid loss: 2.2561, accuracy: 0.4445
+epoch 100 summary: valid_cos_loss : 0.000808, valid loss: 2.2532, accuracy: 0.4457
+epoch 101 summary: valid_cos_loss : 0.000798, valid loss: 2.2502, accuracy: 0.4465
+epoch 102 summary: valid_cos_loss : 0.000788, valid loss: 2.2469, accuracy: 0.4473
+epoch 103 summary: valid_cos_loss : 0.000778, valid loss: 2.2442, accuracy: 0.4468
+epoch 104 summary: valid_cos_loss : 0.000769, valid loss: 2.2404, accuracy: 0.4493
+epoch 105 summary: valid_cos_loss : 0.000761, valid loss: 2.2373, accuracy: 0.4493
+epoch 106 summary: valid_cos_loss : 0.000752, valid loss: 2.2352, accuracy: 0.4491
+epoch 107 summary: valid_cos_loss : 0.000745, valid loss: 2.2318, accuracy: 0.4502
+epoch 108 summary: valid_cos_loss : 0.000738, valid loss: 2.2294, accuracy: 0.4504
+epoch 109 summary: valid_cos_loss : 0.000731, valid loss: 2.2286, accuracy: 0.4506
+epoch 110 summary: valid_cos_loss : 0.000756, valid loss: 2.2264, accuracy: 0.4498
+epoch 111 summary: valid_cos_loss : 0.000748, valid loss: 2.2265, accuracy: 0.4496
+epoch 112 summary: valid_cos_loss : 0.000740, valid loss: 2.2250, accuracy: 0.4509
+epoch 113 summary: valid_cos_loss : 0.000733, valid loss: 2.2222, accuracy: 0.4521
+epoch 114 summary: valid_cos_loss : 0.000727, valid loss: 2.2201, accuracy: 0.4508
+epoch 115 summary: valid_cos_loss : 0.000721, valid loss: 2.2190, accuracy: 0.4500
+epoch 116 summary: valid_cos_loss : 0.000715, valid loss: 2.2172, accuracy: 0.4510
+epoch 117 summary: valid_cos_loss : 0.000709, valid loss: 2.2161, accuracy: 0.4507
+epoch 118 summary: valid_cos_loss : 0.000704, valid loss: 2.2143, accuracy: 0.4509
+epoch 119 summary: valid_cos_loss : 0.000699, valid loss: 2.2121, accuracy: 0.4513
+epoch 120 summary: valid_cos_loss : 0.000723, valid loss: 2.2105, accuracy: 0.4523
+epoch 121 summary: valid_cos_loss : 0.000717, valid loss: 2.2091, accuracy: 0.4530
+epoch 122 summary: valid_cos_loss : 0.000711, valid loss: 2.2062, accuracy: 0.4539
+epoch 123 summary: valid_cos_loss : 0.000705, valid loss: 2.2064, accuracy: 0.4554
+epoch 124 summary: valid_cos_loss : 0.000700, valid loss: 2.2041, accuracy: 0.4553
+epoch 125 summary: valid_cos_loss : 0.000695, valid loss: 2.2030, accuracy: 0.4558
+epoch 126 summary: valid_cos_loss : 0.000690, valid loss: 2.2023, accuracy: 0.4574
+epoch 127 summary: valid_cos_loss : 0.000685, valid loss: 2.2010, accuracy: 0.4587
+epoch 128 summary: valid_cos_loss : 0.000681, valid loss: 2.1998, accuracy: 0.4578
+epoch 129 summary: valid_cos_loss : 0.000677, valid loss: 2.1992, accuracy: 0.4563
+epoch 130 summary: valid_cos_loss : 0.000699, valid loss: 2.1985, accuracy: 0.4553
+epoch 131 summary: valid_cos_loss : 0.000694, valid loss: 2.1983, accuracy: 0.4546
+epoch 132 summary: valid_cos_loss : 0.000689, valid loss: 2.1963, accuracy: 0.4547
+epoch 133 summary: valid_cos_loss : 0.000684, valid loss: 2.1945, accuracy: 0.4563
+epoch 134 summary: valid_cos_loss : 0.000680, valid loss: 2.1933, accuracy: 0.4567
+epoch 135 summary: valid_cos_loss : 0.000675, valid loss: 2.1925, accuracy: 0.4579
+epoch 136 summary: valid_cos_loss : 0.000671, valid loss: 2.1916, accuracy: 0.4581
+epoch 137 summary: valid_cos_loss : 0.000668, valid loss: 2.1901, accuracy: 0.4572
+epoch 138 summary: valid_cos_loss : 0.000664, valid loss: 2.1893, accuracy: 0.4575
+epoch 139 summary: valid_cos_loss : 0.000660, valid loss: 2.1880, accuracy: 0.4581
+epoch 140 summary: valid_cos_loss : 0.000682, valid loss: 2.1872, accuracy: 0.4579
+epoch 141 summary: valid_cos_loss : 0.000677, valid loss: 2.1853, accuracy: 0.4581
+epoch 142 summary: valid_cos_loss : 0.000673, valid loss: 2.1867, accuracy: 0.4583
+epoch 143 summary: valid_cos_loss : 0.000669, valid loss: 2.1857, accuracy: 0.4586
+epoch 144 summary: valid_cos_loss : 0.000665, valid loss: 2.1851, accuracy: 0.4583
+epoch 145 summary: valid_cos_loss : 0.000661, valid loss: 2.1835, accuracy: 0.4587
+epoch 146 summary: valid_cos_loss : 0.000657, valid loss: 2.1826, accuracy: 0.4583
+epoch 147 summary: valid_cos_loss : 0.000654, valid loss: 2.1820, accuracy: 0.4580
+epoch 148 summary: valid_cos_loss : 0.000651, valid loss: 2.1818, accuracy: 0.4589
+epoch 149 summary: valid_cos_loss : 0.000648, valid loss: 2.1805, accuracy: 0.4597
+epoch 150 summary: valid_cos_loss : 0.000673, valid loss: 2.1795, accuracy: 0.4600
+epoch 151 summary: valid_cos_loss : 0.000668, valid loss: 2.1782, accuracy: 0.4596
+epoch 152 summary: valid_cos_loss : 0.000665, valid loss: 2.1798, accuracy: 0.4585
+epoch 153 summary: valid_cos_loss : 0.000661, valid loss: 2.1797, accuracy: 0.4578
+epoch 154 summary: valid_cos_loss : 0.000657, valid loss: 2.1790, accuracy: 0.4586
+epoch 155 summary: valid_cos_loss : 0.000654, valid loss: 2.1789, accuracy: 0.4587
+epoch 156 summary: valid_cos_loss : 0.000650, valid loss: 2.1770, accuracy: 0.4598
+epoch 157 summary: valid_cos_loss : 0.000647, valid loss: 2.1763, accuracy: 0.4598
+epoch 158 summary: valid_cos_loss : 0.000645, valid loss: 2.1762, accuracy: 0.4596
+epoch 159 summary: valid_cos_loss : 0.000642, valid loss: 2.1758, accuracy: 0.4592
+epoch 160 summary: valid_cos_loss : 0.000667, valid loss: 2.1745, accuracy: 0.4600
+epoch 161 summary: valid_cos_loss : 0.000663, valid loss: 2.1737, accuracy: 0.4600
+epoch 162 summary: valid_cos_loss : 0.000659, valid loss: 2.1729, accuracy: 0.4597
+epoch 163 summary: valid_cos_loss : 0.000656, valid loss: 2.1728, accuracy: 0.4600
+epoch 164 summary: valid_cos_loss : 0.000652, valid loss: 2.1723, accuracy: 0.4597
+epoch 165 summary: valid_cos_loss : 0.000649, valid loss: 2.1714, accuracy: 0.4601
+epoch 166 summary: valid_cos_loss : 0.000646, valid loss: 2.1698, accuracy: 0.4595
+epoch 167 summary: valid_cos_loss : 0.000643, valid loss: 2.1701, accuracy: 0.4584
+epoch 168 summary: valid_cos_loss : 0.000641, valid loss: 2.1682, accuracy: 0.4591
+epoch 169 summary: valid_cos_loss : 0.000638, valid loss: 2.1671, accuracy: 0.4581
+epoch 170 summary: valid_cos_loss : 0.000662, valid loss: 2.1653, accuracy: 0.4589
+epoch 171 summary: valid_cos_loss : 0.000658, valid loss: 2.1649, accuracy: 0.4589
+epoch 172 summary: valid_cos_loss : 0.000655, valid loss: 2.1650, accuracy: 0.4591
+epoch 173 summary: valid_cos_loss : 0.000651, valid loss: 2.1654, accuracy: 0.4600
+epoch 174 summary: valid_cos_loss : 0.000648, valid loss: 2.1661, accuracy: 0.4602
+epoch 175 summary: valid_cos_loss : 0.000645, valid loss: 2.1666, accuracy: 0.4607
+epoch 176 summary: valid_cos_loss : 0.000642, valid loss: 2.1668, accuracy: 0.4604
+epoch 177 summary: valid_cos_loss : 0.000640, valid loss: 2.1666, accuracy: 0.4601
+epoch 178 summary: valid_cos_loss : 0.000637, valid loss: 2.1662, accuracy: 0.4615
+epoch 179 summary: valid_cos_loss : 0.000634, valid loss: 2.1651, accuracy: 0.4629
+epoch 180 summary: valid_cos_loss : 0.000657, valid loss: 2.1653, accuracy: 0.4631
+epoch 181 summary: valid_cos_loss : 0.000654, valid loss: 2.1651, accuracy: 0.4628
+epoch 182 summary: valid_cos_loss : 0.000650, valid loss: 2.1658, accuracy: 0.4625
+epoch 183 summary: valid_cos_loss : 0.000647, valid loss: 2.1641, accuracy: 0.4636
+epoch 184 summary: valid_cos_loss : 0.000643, valid loss: 2.1632, accuracy: 0.4634
+epoch 185 summary: valid_cos_loss : 0.000641, valid loss: 2.1638, accuracy: 0.4620
+epoch 186 summary: valid_cos_loss : 0.000638, valid loss: 2.1637, accuracy: 0.4608
+epoch 187 summary: valid_cos_loss : 0.000635, valid loss: 2.1638, accuracy: 0.4607
+epoch 188 summary: valid_cos_loss : 0.000633, valid loss: 2.1638, accuracy: 0.4613
+epoch 189 summary: valid_cos_loss : 0.000630, valid loss: 2.1635, accuracy: 0.4612
+epoch 190 summary: valid_cos_loss : 0.000656, valid loss: 2.1646, accuracy: 0.4606
+epoch 191 summary: valid_cos_loss : 0.000652, valid loss: 2.1655, accuracy: 0.4604
+epoch 192 summary: valid_cos_loss : 0.000649, valid loss: 2.1645, accuracy: 0.4608
+epoch 193 summary: valid_cos_loss : 0.000646, valid loss: 2.1643, accuracy: 0.4609
+epoch 194 summary: valid_cos_loss : 0.000642, valid loss: 2.1642, accuracy: 0.4618
+epoch 195 summary: valid_cos_loss : 0.000639, valid loss: 2.1647, accuracy: 0.4620
+epoch 196 summary: valid_cos_loss : 0.000637, valid loss: 2.1650, accuracy: 0.4612
+epoch 197 summary: valid_cos_loss : 0.000634, valid loss: 2.1645, accuracy: 0.4625
+epoch 198 summary: valid_cos_loss : 0.000631, valid loss: 2.1643, accuracy: 0.4635
+epoch 199 summary: valid_cos_loss : 0.000629, valid loss: 2.1651, accuracy: 0.4634
+epoch 200 summary: valid_cos_loss : 0.000651, valid loss: 2.1663, accuracy: 0.4635
+epoch 201 summary: valid_cos_loss : 0.000647, valid loss: 2.1658, accuracy: 0.4633
+epoch 202 summary: valid_cos_loss : 0.000644, valid loss: 2.1665, accuracy: 0.4624
+epoch 203 summary: valid_cos_loss : 0.000641, valid loss: 2.1657, accuracy: 0.4630
+epoch 204 summary: valid_cos_loss : 0.000638, valid loss: 2.1645, accuracy: 0.4637
+epoch 205 summary: valid_cos_loss : 0.000635, valid loss: 2.1644, accuracy: 0.4639
+epoch 206 summary: valid_cos_loss : 0.000632, valid loss: 2.1652, accuracy: 0.4635
+epoch 207 summary: valid_cos_loss : 0.000630, valid loss: 2.1662, accuracy: 0.4619
+epoch 208 summary: valid_cos_loss : 0.000627, valid loss: 2.1639, accuracy: 0.4625
+epoch 209 summary: valid_cos_loss : 0.000625, valid loss: 2.1630, accuracy: 0.4622
+epoch 210 summary: valid_cos_loss : 0.000651, valid loss: 2.1646, accuracy: 0.4603
+epoch 211 summary: valid_cos_loss : 0.000648, valid loss: 2.1647, accuracy: 0.4590
+epoch 212 summary: valid_cos_loss : 0.000644, valid loss: 2.1636, accuracy: 0.4596
+epoch 213 summary: valid_cos_loss : 0.000641, valid loss: 2.1635, accuracy: 0.4598
+epoch 214 summary: valid_cos_loss : 0.000638, valid loss: 2.1646, accuracy: 0.4609
+epoch 215 summary: valid_cos_loss : 0.000635, valid loss: 2.1643, accuracy: 0.4619
+epoch 216 summary: valid_cos_loss : 0.000633, valid loss: 2.1637, accuracy: 0.4622
+epoch 217 summary: valid_cos_loss : 0.000630, valid loss: 2.1634, accuracy: 0.4614
+epoch 218 summary: valid_cos_loss : 0.000628, valid loss: 2.1640, accuracy: 0.4608
+epoch 219 summary: valid_cos_loss : 0.000625, valid loss: 2.1643, accuracy: 0.4603
+epoch 220 summary: valid_cos_loss : 0.000648, valid loss: 2.1658, accuracy: 0.4602
+epoch 221 summary: valid_cos_loss : 0.000645, valid loss: 2.1670, accuracy: 0.4594
+epoch 222 summary: valid_cos_loss : 0.000642, valid loss: 2.1672, accuracy: 0.4598
+epoch 223 summary: valid_cos_loss : 0.000639, valid loss: 2.1691, accuracy: 0.4587
+epoch 224 summary: valid_cos_loss : 0.000636, valid loss: 2.1686, accuracy: 0.4584
+epoch 225 summary: valid_cos_loss : 0.000633, valid loss: 2.1677, accuracy: 0.4575
+epoch 226 summary: valid_cos_loss : 0.000630, valid loss: 2.1669, accuracy: 0.4574
+epoch 227 summary: valid_cos_loss : 0.000628, valid loss: 2.1663, accuracy: 0.4578
+epoch 228 summary: valid_cos_loss : 0.000626, valid loss: 2.1658, accuracy: 0.4578
+epoch 229 summary: valid_cos_loss : 0.000623, valid loss: 2.1657, accuracy: 0.4583
+epoch 230 summary: valid_cos_loss : 0.000648, valid loss: 2.1664, accuracy: 0.4572
+epoch 231 summary: valid_cos_loss : 0.000645, valid loss: 2.1685, accuracy: 0.4572
+epoch 232 summary: valid_cos_loss : 0.000641, valid loss: 2.1670, accuracy: 0.4578
+epoch 233 summary: valid_cos_loss : 0.000638, valid loss: 2.1671, accuracy: 0.4585
+epoch 234 summary: valid_cos_loss : 0.000635, valid loss: 2.1667, accuracy: 0.4595
+epoch 235 summary: valid_cos_loss : 0.000633, valid loss: 2.1656, accuracy: 0.4597
+epoch 236 summary: valid_cos_loss : 0.000630, valid loss: 2.1647, accuracy: 0.4606
+epoch 237 summary: valid_cos_loss : 0.000628, valid loss: 2.1645, accuracy: 0.4606
+epoch 238 summary: valid_cos_loss : 0.000626, valid loss: 2.1639, accuracy: 0.4611
+epoch 239 summary: valid_cos_loss : 0.000623, valid loss: 2.1638, accuracy: 0.4608
+epoch 240 summary: valid_cos_loss : 0.000647, valid loss: 2.1637, accuracy: 0.4613
+epoch 241 summary: valid_cos_loss : 0.000644, valid loss: 2.1637, accuracy: 0.4613
+epoch 242 summary: valid_cos_loss : 0.000641, valid loss: 2.1642, accuracy: 0.4607
+epoch 243 summary: valid_cos_loss : 0.000638, valid loss: 2.1634, accuracy: 0.4614
+epoch 244 summary: valid_cos_loss : 0.000635, valid loss: 2.1630, accuracy: 0.4619
+epoch 245 summary: valid_cos_loss : 0.000632, valid loss: 2.1625, accuracy: 0.4623
+epoch 246 summary: valid_cos_loss : 0.000630, valid loss: 2.1624, accuracy: 0.4624
+epoch 247 summary: valid_cos_loss : 0.000627, valid loss: 2.1616, accuracy: 0.4628
+epoch 248 summary: valid_cos_loss : 0.000625, valid loss: 2.1615, accuracy: 0.4623
+epoch 249 summary: valid_cos_loss : 0.000623, valid loss: 2.1618, accuracy: 0.4622
+epoch 250 summary: valid_cos_loss : 0.000644, valid loss: 2.1622, accuracy: 0.4614
+epoch 251 summary: valid_cos_loss : 0.000640, valid loss: 2.1634, accuracy: 0.4613
+epoch 252 summary: valid_cos_loss : 0.000637, valid loss: 2.1631, accuracy: 0.4615
+epoch 253 summary: valid_cos_loss : 0.000634, valid loss: 2.1615, accuracy: 0.4629
+epoch 254 summary: valid_cos_loss : 0.000631, valid loss: 2.1615, accuracy: 0.4631
+epoch 255 summary: valid_cos_loss : 0.000629, valid loss: 2.1607, accuracy: 0.4629
+epoch 256 summary: valid_cos_loss : 0.000626, valid loss: 2.1605, accuracy: 0.4629
+epoch 257 summary: valid_cos_loss : 0.000624, valid loss: 2.1599, accuracy: 0.4634
+epoch 258 summary: valid_cos_loss : 0.000622, valid loss: 2.1596, accuracy: 0.4639
+epoch 259 summary: valid_cos_loss : 0.000619, valid loss: 2.1601, accuracy: 0.4639
+epoch 260 summary: valid_cos_loss : 0.000646, valid loss: 2.1605, accuracy: 0.4631
+epoch 261 summary: valid_cos_loss : 0.000643, valid loss: 2.1593, accuracy: 0.4634
+epoch 262 summary: valid_cos_loss : 0.000639, valid loss: 2.1590, accuracy: 0.4634
+epoch 263 summary: valid_cos_loss : 0.000636, valid loss: 2.1586, accuracy: 0.4635
+epoch 264 summary: valid_cos_loss : 0.000634, valid loss: 2.1597, accuracy: 0.4628
+epoch 265 summary: valid_cos_loss : 0.000631, valid loss: 2.1604, accuracy: 0.4619
+epoch 266 summary: valid_cos_loss : 0.000628, valid loss: 2.1601, accuracy: 0.4617
+epoch 267 summary: valid_cos_loss : 0.000626, valid loss: 2.1605, accuracy: 0.4618
+epoch 268 summary: valid_cos_loss : 0.000624, valid loss: 2.1605, accuracy: 0.4622
+epoch 269 summary: valid_cos_loss : 0.000622, valid loss: 2.1612, accuracy: 0.4618
+epoch 270 summary: valid_cos_loss : 0.000643, valid loss: 2.1599, accuracy: 0.4625
+epoch 271 summary: valid_cos_loss : 0.000639, valid loss: 2.1611, accuracy: 0.4615
+epoch 272 summary: valid_cos_loss : 0.000636, valid loss: 2.1616, accuracy: 0.4620
+epoch 273 summary: valid_cos_loss : 0.000633, valid loss: 2.1620, accuracy: 0.4625
+epoch 274 summary: valid_cos_loss : 0.000630, valid loss: 2.1615, accuracy: 0.4629
+epoch 275 summary: valid_cos_loss : 0.000628, valid loss: 2.1606, accuracy: 0.4630
+epoch 276 summary: valid_cos_loss : 0.000625, valid loss: 2.1603, accuracy: 0.4628
+epoch 277 summary: valid_cos_loss : 0.000623, valid loss: 2.1606, accuracy: 0.4624
+epoch 278 summary: valid_cos_loss : 0.000620, valid loss: 2.1593, accuracy: 0.4639
+epoch 279 summary: valid_cos_loss : 0.000618, valid loss: 2.1597, accuracy: 0.4628
+epoch 280 summary: valid_cos_loss : 0.000642, valid loss: 2.1609, accuracy: 0.4625
+epoch 281 summary: valid_cos_loss : 0.000638, valid loss: 2.1617, accuracy: 0.4629
+epoch 282 summary: valid_cos_loss : 0.000635, valid loss: 2.1593, accuracy: 0.4631
+epoch 283 summary: valid_cos_loss : 0.000632, valid loss: 2.1585, accuracy: 0.4641
+epoch 284 summary: valid_cos_loss : 0.000630, valid loss: 2.1594, accuracy: 0.4637
+epoch 285 summary: valid_cos_loss : 0.000627, valid loss: 2.1586, accuracy: 0.4640
+epoch 286 summary: valid_cos_loss : 0.000624, valid loss: 2.1587, accuracy: 0.4639
+epoch 287 summary: valid_cos_loss : 0.000622, valid loss: 2.1576, accuracy: 0.4646
+epoch 288 summary: valid_cos_loss : 0.000620, valid loss: 2.1579, accuracy: 0.4637
+epoch 289 summary: valid_cos_loss : 0.000618, valid loss: 2.1580, accuracy: 0.4636
+epoch 290 summary: valid_cos_loss : 0.000641, valid loss: 2.1592, accuracy: 0.4639
+epoch 291 summary: valid_cos_loss : 0.000638, valid loss: 2.1582, accuracy: 0.4637
+epoch 292 summary: valid_cos_loss : 0.000635, valid loss: 2.1598, accuracy: 0.4635
+epoch 293 summary: valid_cos_loss : 0.000632, valid loss: 2.1607, accuracy: 0.4636
+epoch 294 summary: valid_cos_loss : 0.000629, valid loss: 2.1597, accuracy: 0.4625
+epoch 295 summary: valid_cos_loss : 0.000627, valid loss: 2.1588, accuracy: 0.4628
+epoch 296 summary: valid_cos_loss : 0.000624, valid loss: 2.1582, accuracy: 0.4630
+epoch 297 summary: valid_cos_loss : 0.000622, valid loss: 2.1585, accuracy: 0.4623
+epoch 298 summary: valid_cos_loss : 0.000620, valid loss: 2.1576, accuracy: 0.4628
+epoch 299 summary: valid_cos_loss : 0.000617, valid loss: 2.1572, accuracy: 0.4618
+epoch 300 summary: valid_cos_loss : 0.000642, valid loss: 2.1575, accuracy: 0.4620
+epoch 301 summary: valid_cos_loss : 0.000639, valid loss: 2.1579, accuracy: 0.4617
+epoch 302 summary: valid_cos_loss : 0.000636, valid loss: 2.1563, accuracy: 0.4633
+epoch 303 summary: valid_cos_loss : 0.000633, valid loss: 2.1573, accuracy: 0.4623
+epoch 304 summary: valid_cos_loss : 0.000631, valid loss: 2.1577, accuracy: 0.4626
+epoch 305 summary: valid_cos_loss : 0.000628, valid loss: 2.1559, accuracy: 0.4628
+epoch 306 summary: valid_cos_loss : 0.000626, valid loss: 2.1542, accuracy: 0.4629
+epoch 307 summary: valid_cos_loss : 0.000623, valid loss: 2.1538, accuracy: 0.4624
+epoch 308 summary: valid_cos_loss : 0.000621, valid loss: 2.1531, accuracy: 0.4630
+epoch 309 summary: valid_cos_loss : 0.000619, valid loss: 2.1522, accuracy: 0.4636
+epoch 310 summary: valid_cos_loss : 0.000643, valid loss: 2.1519, accuracy: 0.4642
+epoch 311 summary: valid_cos_loss : 0.000640, valid loss: 2.1520, accuracy: 0.4642
+epoch 312 summary: valid_cos_loss : 0.000637, valid loss: 2.1518, accuracy: 0.4639
+epoch 313 summary: valid_cos_loss : 0.000634, valid loss: 2.1530, accuracy: 0.4642
+epoch 314 summary: valid_cos_loss : 0.000631, valid loss: 2.1541, accuracy: 0.4635
+epoch 315 summary: valid_cos_loss : 0.000629, valid loss: 2.1549, accuracy: 0.4628
+epoch 316 summary: valid_cos_loss : 0.000626, valid loss: 2.1534, accuracy: 0.4635
+epoch 317 summary: valid_cos_loss : 0.000624, valid loss: 2.1544, accuracy: 0.4626
+epoch 318 summary: valid_cos_loss : 0.000622, valid loss: 2.1543, accuracy: 0.4625
+epoch 319 summary: valid_cos_loss : 0.000619, valid loss: 2.1538, accuracy: 0.4642
+epoch 320 summary: valid_cos_loss : 0.000640, valid loss: 2.1557, accuracy: 0.4636
+epoch 321 summary: valid_cos_loss : 0.000637, valid loss: 2.1550, accuracy: 0.4641
+epoch 322 summary: valid_cos_loss : 0.000634, valid loss: 2.1544, accuracy: 0.4651
+epoch 323 summary: valid_cos_loss : 0.000631, valid loss: 2.1548, accuracy: 0.4641
+epoch 324 summary: valid_cos_loss : 0.000628, valid loss: 2.1548, accuracy: 0.4650
+epoch 325 summary: valid_cos_loss : 0.000625, valid loss: 2.1549, accuracy: 0.4650
+epoch 326 summary: valid_cos_loss : 0.000623, valid loss: 2.1556, accuracy: 0.4650
+epoch 327 summary: valid_cos_loss : 0.000621, valid loss: 2.1559, accuracy: 0.4653
+epoch 328 summary: valid_cos_loss : 0.000618, valid loss: 2.1568, accuracy: 0.4647
+epoch 329 summary: valid_cos_loss : 0.000616, valid loss: 2.1557, accuracy: 0.4636
+epoch 330 summary: valid_cos_loss : 0.000640, valid loss: 2.1559, accuracy: 0.4637
+epoch 331 summary: valid_cos_loss : 0.000636, valid loss: 2.1567, accuracy: 0.4633
+epoch 332 summary: valid_cos_loss : 0.000633, valid loss: 2.1564, accuracy: 0.4629
+epoch 333 summary: valid_cos_loss : 0.000631, valid loss: 2.1578, accuracy: 0.4614
+epoch 334 summary: valid_cos_loss : 0.000628, valid loss: 2.1578, accuracy: 0.4617
+epoch 335 summary: valid_cos_loss : 0.000625, valid loss: 2.1577, accuracy: 0.4624
+epoch 336 summary: valid_cos_loss : 0.000623, valid loss: 2.1577, accuracy: 0.4629
+epoch 337 summary: valid_cos_loss : 0.000621, valid loss: 2.1577, accuracy: 0.4626
+epoch 338 summary: valid_cos_loss : 0.000618, valid loss: 2.1571, accuracy: 0.4630
+epoch 339 summary: valid_cos_loss : 0.000616, valid loss: 2.1568, accuracy: 0.4626
+epoch 340 summary: valid_cos_loss : 0.000641, valid loss: 2.1575, accuracy: 0.4623
+epoch 341 summary: valid_cos_loss : 0.000638, valid loss: 2.1582, accuracy: 0.4615
+epoch 342 summary: valid_cos_loss : 0.000635, valid loss: 2.1581, accuracy: 0.4623
+epoch 343 summary: valid_cos_loss : 0.000632, valid loss: 2.1580, accuracy: 0.4625
+epoch 344 summary: valid_cos_loss : 0.000629, valid loss: 2.1579, accuracy: 0.4613
+epoch 345 summary: valid_cos_loss : 0.000627, valid loss: 2.1574, accuracy: 0.4601
+epoch 346 summary: valid_cos_loss : 0.000624, valid loss: 2.1561, accuracy: 0.4608
+epoch 347 summary: valid_cos_loss : 0.000622, valid loss: 2.1570, accuracy: 0.4617
+epoch 348 summary: valid_cos_loss : 0.000620, valid loss: 2.1559, accuracy: 0.4622
+epoch 349 summary: valid_cos_loss : 0.000618, valid loss: 2.1560, accuracy: 0.4625
+epoch 350 summary: valid_cos_loss : 0.000639, valid loss: 2.1567, accuracy: 0.4625
+epoch 351 summary: valid_cos_loss : 0.000636, valid loss: 2.1557, accuracy: 0.4631
+epoch 352 summary: valid_cos_loss : 0.000633, valid loss: 2.1568, accuracy: 0.4620
+epoch 353 summary: valid_cos_loss : 0.000630, valid loss: 2.1563, accuracy: 0.4625
+epoch 354 summary: valid_cos_loss : 0.000628, valid loss: 2.1557, accuracy: 0.4631
+epoch 355 summary: valid_cos_loss : 0.000625, valid loss: 2.1555, accuracy: 0.4633
+epoch 356 summary: valid_cos_loss : 0.000623, valid loss: 2.1566, accuracy: 0.4624
+epoch 357 summary: valid_cos_loss : 0.000620, valid loss: 2.1566, accuracy: 0.4629
+epoch 358 summary: valid_cos_loss : 0.000618, valid loss: 2.1557, accuracy: 0.4619
+epoch 359 summary: valid_cos_loss : 0.000616, valid loss: 2.1553, accuracy: 0.4620
+epoch 360 summary: valid_cos_loss : 0.000641, valid loss: 2.1542, accuracy: 0.4634
+epoch 361 summary: valid_cos_loss : 0.000638, valid loss: 2.1546, accuracy: 0.4630
+epoch 362 summary: valid_cos_loss : 0.000635, valid loss: 2.1546, accuracy: 0.4634
+epoch 363 summary: valid_cos_loss : 0.000632, valid loss: 2.1557, accuracy: 0.4636
+epoch 364 summary: valid_cos_loss : 0.000629, valid loss: 2.1550, accuracy: 0.4639
+epoch 365 summary: valid_cos_loss : 0.000626, valid loss: 2.1547, accuracy: 0.4636
+epoch 366 summary: valid_cos_loss : 0.000624, valid loss: 2.1552, accuracy: 0.4640
+epoch 367 summary: valid_cos_loss : 0.000621, valid loss: 2.1549, accuracy: 0.4631
+epoch 368 summary: valid_cos_loss : 0.000619, valid loss: 2.1544, accuracy: 0.4629
+epoch 369 summary: valid_cos_loss : 0.000617, valid loss: 2.1545, accuracy: 0.4626
+epoch 370 summary: valid_cos_loss : 0.000641, valid loss: 2.1538, accuracy: 0.4624
+epoch 371 summary: valid_cos_loss : 0.000638, valid loss: 2.1531, accuracy: 0.4618
+epoch 372 summary: valid_cos_loss : 0.000635, valid loss: 2.1532, accuracy: 0.4619
+epoch 373 summary: valid_cos_loss : 0.000632, valid loss: 2.1544, accuracy: 0.4622
+epoch 374 summary: valid_cos_loss : 0.000629, valid loss: 2.1541, accuracy: 0.4622
+epoch 375 summary: valid_cos_loss : 0.000627, valid loss: 2.1536, accuracy: 0.4631
+epoch 376 summary: valid_cos_loss : 0.000624, valid loss: 2.1547, accuracy: 0.4613
+epoch 377 summary: valid_cos_loss : 0.000622, valid loss: 2.1548, accuracy: 0.4618
+epoch 378 summary: valid_cos_loss : 0.000620, valid loss: 2.1540, accuracy: 0.4615
+epoch 379 summary: valid_cos_loss : 0.000617, valid loss: 2.1531, accuracy: 0.4611
+epoch 380 summary: valid_cos_loss : 0.000640, valid loss: 2.1537, accuracy: 0.4611
+epoch 381 summary: valid_cos_loss : 0.000637, valid loss: 2.1546, accuracy: 0.4618
+epoch 382 summary: valid_cos_loss : 0.000633, valid loss: 2.1544, accuracy: 0.4619
+epoch 383 summary: valid_cos_loss : 0.000630, valid loss: 2.1545, accuracy: 0.4614
+epoch 384 summary: valid_cos_loss : 0.000628, valid loss: 2.1545, accuracy: 0.4612
+epoch 385 summary: valid_cos_loss : 0.000625, valid loss: 2.1543, accuracy: 0.4613
+epoch 386 summary: valid_cos_loss : 0.000623, valid loss: 2.1540, accuracy: 0.4611
+epoch 387 summary: valid_cos_loss : 0.000620, valid loss: 2.1530, accuracy: 0.4620
+epoch 388 summary: valid_cos_loss : 0.000618, valid loss: 2.1529, accuracy: 0.4622
+epoch 389 summary: valid_cos_loss : 0.000616, valid loss: 2.1537, accuracy: 0.4622
+epoch 390 summary: valid_cos_loss : 0.000640, valid loss: 2.1537, accuracy: 0.4620
+epoch 391 summary: valid_cos_loss : 0.000636, valid loss: 2.1532, accuracy: 0.4623
+epoch 392 summary: valid_cos_loss : 0.000633, valid loss: 2.1554, accuracy: 0.4608
+epoch 393 summary: valid_cos_loss : 0.000631, valid loss: 2.1551, accuracy: 0.4619
+epoch 394 summary: valid_cos_loss : 0.000628, valid loss: 2.1550, accuracy: 0.4623
+epoch 395 summary: valid_cos_loss : 0.000625, valid loss: 2.1546, accuracy: 0.4631
+epoch 396 summary: valid_cos_loss : 0.000623, valid loss: 2.1536, accuracy: 0.4634
+epoch 397 summary: valid_cos_loss : 0.000621, valid loss: 2.1544, accuracy: 0.4626
+epoch 398 summary: valid_cos_loss : 0.000619, valid loss: 2.1551, accuracy: 0.4630
+epoch 399 summary: valid_cos_loss : 0.000616, valid loss: 2.1552, accuracy: 0.4634
+epoch 400 summary: valid_cos_loss : 0.000639, valid loss: 2.1559, accuracy: 0.4629
+epoch 401 summary: valid_cos_loss : 0.000636, valid loss: 2.1557, accuracy: 0.4636
+epoch 402 summary: valid_cos_loss : 0.000633, valid loss: 2.1560, accuracy: 0.4630
+epoch 403 summary: valid_cos_loss : 0.000630, valid loss: 2.1551, accuracy: 0.4633
+epoch 404 summary: valid_cos_loss : 0.000627, valid loss: 2.1546, accuracy: 0.4639
+epoch 405 summary: valid_cos_loss : 0.000625, valid loss: 2.1546, accuracy: 0.4631
+epoch 406 summary: valid_cos_loss : 0.000622, valid loss: 2.1541, accuracy: 0.4637
+epoch 407 summary: valid_cos_loss : 0.000620, valid loss: 2.1534, accuracy: 0.4631
+epoch 408 summary: valid_cos_loss : 0.000618, valid loss: 2.1518, accuracy: 0.4630
+epoch 409 summary: valid_cos_loss : 0.000615, valid loss: 2.1509, accuracy: 0.4630
+epoch 410 summary: valid_cos_loss : 0.000636, valid loss: 2.1504, accuracy: 0.4640
+epoch 411 summary: valid_cos_loss : 0.000633, valid loss: 2.1521, accuracy: 0.4635
+epoch 412 summary: valid_cos_loss : 0.000630, valid loss: 2.1518, accuracy: 0.4636
+epoch 413 summary: valid_cos_loss : 0.000627, valid loss: 2.1531, accuracy: 0.4630
+epoch 414 summary: valid_cos_loss : 0.000625, valid loss: 2.1528, accuracy: 0.4622
+epoch 415 summary: valid_cos_loss : 0.000622, valid loss: 2.1529, accuracy: 0.4628
+epoch 416 summary: valid_cos_loss : 0.000620, valid loss: 2.1533, accuracy: 0.4624
+epoch 417 summary: valid_cos_loss : 0.000618, valid loss: 2.1533, accuracy: 0.4624
+epoch 418 summary: valid_cos_loss : 0.000615, valid loss: 2.1528, accuracy: 0.4620
+epoch 419 summary: valid_cos_loss : 0.000613, valid loss: 2.1530, accuracy: 0.4624
+epoch 420 summary: valid_cos_loss : 0.000638, valid loss: 2.1546, accuracy: 0.4613
+epoch 421 summary: valid_cos_loss : 0.000634, valid loss: 2.1556, accuracy: 0.4608
+epoch 422 summary: valid_cos_loss : 0.000631, valid loss: 2.1554, accuracy: 0.4612
+epoch 423 summary: valid_cos_loss : 0.000628, valid loss: 2.1549, accuracy: 0.4617
+epoch 424 summary: valid_cos_loss : 0.000626, valid loss: 2.1542, accuracy: 0.4612
+epoch 425 summary: valid_cos_loss : 0.000623, valid loss: 2.1541, accuracy: 0.4615
+epoch 426 summary: valid_cos_loss : 0.000621, valid loss: 2.1545, accuracy: 0.4619
+epoch 427 summary: valid_cos_loss : 0.000619, valid loss: 2.1544, accuracy: 0.4619
+epoch 428 summary: valid_cos_loss : 0.000616, valid loss: 2.1534, accuracy: 0.4625
+epoch 429 summary: valid_cos_loss : 0.000614, valid loss: 2.1537, accuracy: 0.4618
+epoch 430 summary: valid_cos_loss : 0.000638, valid loss: 2.1538, accuracy: 0.4620
+epoch 431 summary: valid_cos_loss : 0.000635, valid loss: 2.1532, accuracy: 0.4629
+epoch 432 summary: valid_cos_loss : 0.000632, valid loss: 2.1533, accuracy: 0.4636
+epoch 433 summary: valid_cos_loss : 0.000629, valid loss: 2.1538, accuracy: 0.4647
+epoch 434 summary: valid_cos_loss : 0.000626, valid loss: 2.1533, accuracy: 0.4650
+epoch 435 summary: valid_cos_loss : 0.000624, valid loss: 2.1524, accuracy: 0.4651
+epoch 436 summary: valid_cos_loss : 0.000621, valid loss: 2.1517, accuracy: 0.4658
+epoch 437 summary: valid_cos_loss : 0.000619, valid loss: 2.1516, accuracy: 0.4650
+epoch 438 summary: valid_cos_loss : 0.000617, valid loss: 2.1511, accuracy: 0.4650
+epoch 439 summary: valid_cos_loss : 0.000614, valid loss: 2.1501, accuracy: 0.4668
+epoch 440 summary: valid_cos_loss : 0.000639, valid loss: 2.1490, accuracy: 0.4674
+epoch 441 summary: valid_cos_loss : 0.000636, valid loss: 2.1486, accuracy: 0.4680
+epoch 442 summary: valid_cos_loss : 0.000633, valid loss: 2.1491, accuracy: 0.4667
+epoch 443 summary: valid_cos_loss : 0.000630, valid loss: 2.1501, accuracy: 0.4658
+epoch 444 summary: valid_cos_loss : 0.000627, valid loss: 2.1504, accuracy: 0.4666
+epoch 445 summary: valid_cos_loss : 0.000624, valid loss: 2.1503, accuracy: 0.4662
+epoch 446 summary: valid_cos_loss : 0.000622, valid loss: 2.1505, accuracy: 0.4662
+epoch 447 summary: valid_cos_loss : 0.000620, valid loss: 2.1512, accuracy: 0.4658
+epoch 448 summary: valid_cos_loss : 0.000618, valid loss: 2.1499, accuracy: 0.4662
+epoch 449 summary: valid_cos_loss : 0.000616, valid loss: 2.1498, accuracy: 0.4670
+epoch 450 summary: valid_cos_loss : 0.000635, valid loss: 2.1498, accuracy: 0.4674
+epoch 451 summary: valid_cos_loss : 0.000632, valid loss: 2.1501, accuracy: 0.4667
+epoch 452 summary: valid_cos_loss : 0.000629, valid loss: 2.1511, accuracy: 0.4658
+epoch 453 summary: valid_cos_loss : 0.000626, valid loss: 2.1492, accuracy: 0.4670
+epoch 454 summary: valid_cos_loss : 0.000623, valid loss: 2.1507, accuracy: 0.4667
+epoch 455 summary: valid_cos_loss : 0.000621, valid loss: 2.1512, accuracy: 0.4661
+epoch 456 summary: valid_cos_loss : 0.000618, valid loss: 2.1512, accuracy: 0.4659
+epoch 457 summary: valid_cos_loss : 0.000616, valid loss: 2.1516, accuracy: 0.4669
+epoch 458 summary: valid_cos_loss : 0.000614, valid loss: 2.1513, accuracy: 0.4667
+epoch 459 summary: valid_cos_loss : 0.000612, valid loss: 2.1515, accuracy: 0.4666
+epoch 460 summary: valid_cos_loss : 0.000636, valid loss: 2.1529, accuracy: 0.4670
+epoch 461 summary: valid_cos_loss : 0.000633, valid loss: 2.1530, accuracy: 0.4684
+epoch 462 summary: valid_cos_loss : 0.000630, valid loss: 2.1540, accuracy: 0.4680
+epoch 463 summary: valid_cos_loss : 0.000627, valid loss: 2.1545, accuracy: 0.4674
+epoch 464 summary: valid_cos_loss : 0.000624, valid loss: 2.1545, accuracy: 0.4663
+epoch 465 summary: valid_cos_loss : 0.000622, valid loss: 2.1536, accuracy: 0.4661
+epoch 466 summary: valid_cos_loss : 0.000619, valid loss: 2.1530, accuracy: 0.4663
+epoch 467 summary: valid_cos_loss : 0.000617, valid loss: 2.1540, accuracy: 0.4658
+epoch 468 summary: valid_cos_loss : 0.000615, valid loss: 2.1523, accuracy: 0.4673
+epoch 469 summary: valid_cos_loss : 0.000613, valid loss: 2.1531, accuracy: 0.4670
+epoch 470 summary: valid_cos_loss : 0.000637, valid loss: 2.1525, accuracy: 0.4659
+epoch 471 summary: valid_cos_loss : 0.000634, valid loss: 2.1522, accuracy: 0.4659
+epoch 472 summary: valid_cos_loss : 0.000631, valid loss: 2.1531, accuracy: 0.4661
+epoch 473 summary: valid_cos_loss : 0.000628, valid loss: 2.1542, accuracy: 0.4658
+epoch 474 summary: valid_cos_loss : 0.000626, valid loss: 2.1535, accuracy: 0.4664
+epoch 475 summary: valid_cos_loss : 0.000623, valid loss: 2.1537, accuracy: 0.4651
+epoch 476 summary: valid_cos_loss : 0.000621, valid loss: 2.1532, accuracy: 0.4657
+epoch 477 summary: valid_cos_loss : 0.000618, valid loss: 2.1529, accuracy: 0.4652
+epoch 478 summary: valid_cos_loss : 0.000616, valid loss: 2.1517, accuracy: 0.4656
+epoch 479 summary: valid_cos_loss : 0.000614, valid loss: 2.1526, accuracy: 0.4650
+epoch 480 summary: valid_cos_loss : 0.000638, valid loss: 2.1528, accuracy: 0.4634
+epoch 481 summary: valid_cos_loss : 0.000635, valid loss: 2.1528, accuracy: 0.4635
+epoch 482 summary: valid_cos_loss : 0.000632, valid loss: 2.1521, accuracy: 0.4645
+epoch 483 summary: valid_cos_loss : 0.000629, valid loss: 2.1519, accuracy: 0.4648
+epoch 484 summary: valid_cos_loss : 0.000626, valid loss: 2.1507, accuracy: 0.4648
+epoch 485 summary: valid_cos_loss : 0.000624, valid loss: 2.1508, accuracy: 0.4655
+epoch 486 summary: valid_cos_loss : 0.000621, valid loss: 2.1514, accuracy: 0.4663
+epoch 487 summary: valid_cos_loss : 0.000619, valid loss: 2.1522, accuracy: 0.4661
+epoch 488 summary: valid_cos_loss : 0.000617, valid loss: 2.1516, accuracy: 0.4662
+epoch 489 summary: valid_cos_loss : 0.000615, valid loss: 2.1511, accuracy: 0.4666
+epoch 490 summary: valid_cos_loss : 0.000638, valid loss: 2.1516, accuracy: 0.4668
+epoch 491 summary: valid_cos_loss : 0.000634, valid loss: 2.1519, accuracy: 0.4672
+epoch 492 summary: valid_cos_loss : 0.000631, valid loss: 2.1522, accuracy: 0.4668
+epoch 493 summary: valid_cos_loss : 0.000628, valid loss: 2.1511, accuracy: 0.4670
+epoch 494 summary: valid_cos_loss : 0.000626, valid loss: 2.1502, accuracy: 0.4663
+epoch 495 summary: valid_cos_loss : 0.000623, valid loss: 2.1507, accuracy: 0.4662
+epoch 496 summary: valid_cos_loss : 0.000621, valid loss: 2.1491, accuracy: 0.4667
+epoch 497 summary: valid_cos_loss : 0.000618, valid loss: 2.1492, accuracy: 0.4667
+epoch 498 summary: valid_cos_loss : 0.000616, valid loss: 2.1495, accuracy: 0.4662
+epoch 499 summary: valid_cos_loss : 0.000614, valid loss: 2.1503, accuracy: 0.4655
+all                        1273803.674ms
+all_epoch                  1272931.392ms
+all_preparation                872.261ms
+all_preparation_2              867.418ms
+all_preparation_3                4.786ms
+epoch                         2519.818ms
+epoch_pos_train                  0.612ms
+epoch_preparation                0.141ms
+epoch_train                   2413.975ms
+epoch_valid                    104.940ms
 ----------------------------------------
-all                              0.000ms
-all_preparation                745.856ms
-  all_preparation_2     99.74%
-  all_preparation_3      0.26%
-epoch                       113746.119ms
-  epoch_train           94.81%
-  epoch_valid            5.13%
-  epoch_pos_train        0.03%
+all                        1273803.674ms
+  all_epoch             99.93%
+  all_preparation        0.07%
+all_preparation                872.261ms
+  all_preparation_2     99.44%
+  all_preparation_3      0.55%
+epoch                      1259908.988ms
+  epoch_train           95.80%
+  epoch_valid            4.16%
+  epoch_pos_train        0.02%
   epoch_preparation      0.01%

@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/yancheng/SeLM_v2/src/gpt.py", line 21, in <module>
+    from src.cte import *
+  File "/home/yancheng/SeLM_v2/src/cte.py", line 269
+    torch.gather(logits_ori, dim=1, index=cur_tar[:, None])[:, :, None, None]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+SyntaxError: invalid syntax. Perhaps you forgot a comma?

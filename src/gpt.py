@@ -299,13 +299,15 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {valid_acc}")
 
     #### step 3.2: CTE 训练与测试
-    # cte.train_all(
-    #     train_emb, vocab_emb, train_y
-    # )
-    cte.test_time_train_all(
-        train_emb, valid_emb, vocab_emb, valid_y,
-        f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_N_valid{N_valid}_epoch{train_epoch_num}.pt"
-    )
+    if not valid_only:
+        cte.train_all(
+            train_emb, vocab_emb, train_y
+        )
+    if not train_only:
+        cte.test_time_train_all(
+            train_emb, valid_emb, vocab_emb, valid_y,
+            f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_N_valid{N_valid}_epoch{train_epoch_num}.pt"
+        )
 
 
         

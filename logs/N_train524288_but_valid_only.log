@@ -1,0 +1,25 @@
+Traceback (most recent call last):
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/yancheng/SeLM_v2/src/gpt.py", line 328, in <module>
+    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/yancheng/SeLM_v2/src/gpt.py", line 305, in train_cte
+    cte.test_time_train_all(
+  File "/home/yancheng/SeLM_v2/src/gettime.py", line 118, in wrapper
+    return fn(*args, **kwargs)
+  File "/home/yancheng/SeLM_v2/src/cte.py", line 704, in test_time_train_all
+    self.main_locations = torch.load(main_locations_path).to(main_device)
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/site-packages/torch/serialization.py", line 1319, in load
+    with _open_file_like(f, "rb") as opened_file:
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/site-packages/torch/serialization.py", line 659, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/site-packages/torch/serialization.py", line 640, in __init__
+    super().__init__(open(name, mode))
+FileNotFoundError: [Errno 2] No such file or directory: './ckpt/cte/locations_h18_tp16_N_train524288_N_vocab65_N_valid8192_epoch500.pt'
+数据集总长度：1115394
+Before CTE Training: train eu loss: 1.128658413887024, eval eu loss: 1.4524140357971191
+Before CTE Training: train eu acc: 0.6393642425537109, eval eu acc: 0.5721435546875

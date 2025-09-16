@@ -1,6 +1,8 @@
 数据集总长度：1115394
 Before CTE Training: train eu loss: 1.133409023284912, eval eu loss: 1.4524140357971191
-Before CTE Training: train eu acc: 0.6369781494140625, eval eu acc: 0.5721435546875
+Before CTE Training: train eu acc: 0.6369781494140625, eval eu acc: 0.5721435546875rain in 512 1024 2048 4096 8192 16384 32768 65536 131072 524288; do
+echo "== N_train = $N_train ==:
+pytho
 epoch   0 summary: train_cos_loss : 0.027049, train_cro_loss : 4.2820, train_tot_loss : 0.0277, vocab_cos_loss : 0.0000, vocab_cro_loss : 0.0000, vocab_tot_loss : 0.0000, train loss: 4.1724, accuracy: 0.0480
 epoch   1 summary: train_cos_loss : 0.026929, train_cro_loss : 4.1649, train_tot_loss : 0.0275, vocab_cos_loss : 0.0000, vocab_cro_loss : 0.0000, vocab_tot_loss : 0.0000, train loss: 4.0531, accuracy: 0.0900
 epoch   2 summary: train_cos_loss : 0.026786, train_cro_loss : 4.0454, train_tot_loss : 0.0274, vocab_cos_loss : 0.0000, vocab_cro_loss : 0.0000, vocab_tot_loss : 0.0000, train loss: 3.9341, accuracy: 0.1377

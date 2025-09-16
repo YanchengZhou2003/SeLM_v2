@@ -26,6 +26,8 @@ parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
 parser.add_argument("--T_train"           , type=int,   default=128,   help="")
 parser.add_argument("--N_train_neighbors" , type=int,   default=256,   help="")
 
+parser.add_argument("--T_vonbr"           , type=int,   default=512,   help="")
+
 parser.add_argument("--N_valid"           , type=int,   default=2048,  help="")
 parser.add_argument("--T_valid"           , type=int,   default=32,    help="")
 parser.add_argument("--N_valid_neighbors" , type=int,   default=1024,  help="")
@@ -48,6 +50,9 @@ parser.add_argument("--train_converge"    , type=int,   default=50 ,   help="")
 parser.add_argument("--valid_converge"    , type=int,   default=50 ,   help="")
 parser.add_argument("--train_graph_reset" , type=int,   default=50,    help="")
 parser.add_argument("--valid_graph_reset" , type=int,   default=50,    help="")
+
+parser.add_argument("--train_only"        , type=int,   default=0 ,   help="")
+parser.add_argument("--valid_only"        , type=int,   default=0 ,   help="")
 
 parser.add_argument("--vis_path"          , type=str,   default='./vis2/tmp' , help="")
 parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
@@ -100,7 +105,7 @@ N_train           = args.N_train           # 65536
 T_train           = args.T_train           # 256
 N_trnbr           = args.N_train_neighbors # 512
 
-T_vonbr           = N_train                # 512
+T_vonbr           = args.T_vonbr           # 1024
 
 N_valid           = args.N_valid           # 8192
 T_valid           = args.T_valid           # 256
@@ -141,11 +146,15 @@ loss_strategy: Dict = {
 train_epoch_num = args.train_epoch_num # 5
 valid_epoch_num = args.valid_epoch_num # 5
 
+train_graph_reset = args.train_graph_reset # 50
+valid_graph_reset = args.valid_graph_reset # 50
+
 division_fact   = args.division_fact   # 1.0
 N_K             = int(h / division_fact)
 N_C             = 2 * N_K * h + 1
 
-
+train_only      = args.train_only        # 0
+valid_only      = args.valid_only        # 0
 
 generators = {}
 
