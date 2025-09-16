@@ -11,25 +11,25 @@
       "args": [
         "--train_length",   "4096",
         "--truncate_valid", "4096",
-        "--ratio_cos", "0.99995",
-        "--ratio_cro", "0.00005",
-        "--sample_factor", "3.0",
-        "--N_T", "128",
-        "--h", "18",
-        "--tp", "64",
+        "--ratio_cos", "0.9999",
+        "--ratio_cro", "0.0001",
+        "--sample_factor", "4.0",
+        "--N_T", "64",
+        "--h", "21",
+        "--tp", "32",
         "--cur_tp", "4",
         "--cur_portion", "0.5",
         "--epoch_num", "1000",
-        "--converge", "20"
+        "--converge", "100"
         
         // "--sample_factor", "0.4",
       ],
       "env": {
-        "TRITON_CODEGEN_DEBUG": "1",
-        "TRITON_DUMP_LLVM": "1",
-        "TRITON_DUMP_ASM": "1",
-        "TRITON_INTERPRET": "1",
-        "CUDA_LAUNCH_BLOCKING": "1"
+        // "TRITON_CODEGEN_DEBUG": "1",
+        // "TRITON_DUMP_LLVM": "1",
+        // "TRITON_DUMP_ASM": "1",
+        // "TRITON_INTERPRET": "1",
+        // "CUDA_LAUNCH_BLOCKING": "1"
       },
 
     },

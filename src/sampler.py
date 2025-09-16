@@ -207,10 +207,10 @@ class Expander_Sampler(BaseSample):
             if connect_to_sta:
                 graph[-1].extend([i for i in range(self.N_dyn, self.N_train)])
         self.graph         = torch.tensor(graph, dtype=torch.long, device=self.main_device) 
-        self.valid_indices = torch.randint(0, self.N_train, (self.N_valid,), dtype=torch.long, device=self.main_device)
         if connect_to_sta:
             self.S = self.S + (self.N_train - self.N_dyn)
         
+        self.valid_graph   = torch.randint(0, self.N_dyn, (self.N_valid, self.S), dtype=torch.long, device="cuda:0")
         
         
     def get_connection(self, cur_slice: slice, cur_type: str):
@@ -221,9 +221,9 @@ class Expander_Sampler(BaseSample):
             (m, c) 的 LongTensor，每行是对应节点的 c 个邻居 id
         """
         if cur_type == "valid":
-            return self.graph[self.valid_indices[cur_slice]] # 高级索引
+            return self.valid_graph[cur_slice] # 高级索引
         else:
-            return self.graph[cur_slice]                     # 切片索引
+            return self.graph[cur_slice] # 切片索引
         
     def generate_connections(self, expected_type: Literal["train", "valid"]):
         for block in self.splits:
@@ -243,11 +243,12 @@ class Expander_Sampler(BaseSample):
         
     def reset_indices(self, cur_type: str):
         if cur_type == "train":
-            randperm = torch.randperm(self.N_train, device=self.main_device)
+            randperm = torch.randperm(self.N_dyn, device=self.main_device)
+            randperm = torch.cat([randperm, torch.arange(self.N_dyn, self.N_train, device=self.main_device)], dim=0)
             self.graph = self.graph[randperm]
             self.generate_connections("train")
         else:
-            self.valid_indices = torch.randint(0, self.N_train, (self.N_valid,), dtype=torch.long, device="cuda:0")
+            self.valid_graph = torch.randint(0, self.N_dyn, (self.N_valid, self.S), dtype=torch.long, device="cuda:0")
             self.generate_connections("valid")
 
     def next_block(self, sid: int) -> Tuple[Optional[int], Optional[Tuple[int, int]]]:
@@ -265,6 +266,8 @@ class Expander_Sampler(BaseSample):
         return self.main_locations[block[0]:block[1]] # (T, D)
     
     def get_pos_loc(self, block: Tuple[int, int]) -> torch.Tensor:
+        if block[0] > self.N_train:
+            ...
         return self.main_locations[self.get_cnc(block)] # (T, S_cos, D)
         
     def get_val(self, block: Tuple[int, int]) -> torch.Tensor:

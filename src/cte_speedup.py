@@ -302,6 +302,9 @@ class CritiGraph(torch.nn.Module):
                     block_id, block, sta_loc, pos_loc, eu_val, ready_evt = self.prefetcher.get_sample(sid)
                     if block is None:
                         break
+                    
+                    if block[0] >= self.N_train:
+                        ...
                     # time.sleep(0.2)
                     with torch.cuda.device(device), torch.cuda.stream(stream):
                         stream.wait_event(ready_evt)  # 等待 copy 流完成
@@ -485,7 +488,7 @@ class CritiGraph(torch.nn.Module):
             
             if epoch % 50 == 0 and epoch != 0:
                 self.sampler.reset_indices("train")
-            if epoch % 5 == 0 and epoch != 0:
+            if epoch % 10 == 0 and epoch != 0:
                 self.sampler.reset_indices("valid")
             
 
@@ -536,7 +539,7 @@ class CritiGraph(torch.nn.Module):
             
             print(f"epoch {epoch:3d} summary:", end=" ")
             for k, v in loss_split_record.items():    
-                if k.startswith("train_cos"): 
+                if k.startswith("train_cos") or k.startswith("valid_cos"): 
                     print(f"{k:15s}: {v:.6f}", end=", ")
                 else:
                     print(f"{k:15s}: {v:.4f}", end=", ")

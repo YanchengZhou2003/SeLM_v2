@@ -1,0 +1,1 @@
+python -m src.gpt --train_length 4096 --truncate_valid 4096 --ratio_cos 0.9999 --ratio_cro 0.0001 --sample_factor 4.0 --h 21 --tp 64 --cur_tp 4 --cur_portion 0.5 --epoch_num 1000 --converge 100
