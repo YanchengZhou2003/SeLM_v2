@@ -22,34 +22,35 @@ parser.add_argument("--cte_train_iters"   , type=int,   default=1,     help="")
 parser.add_argument("--cte_eval_bs"       , type=int,   default=32,    help="")
 parser.add_argument("--cte_eval_iters"    , type=int,   default=1,     help="")
 
-parser.add_argument("--N_train"           , type=int,   default=65536, help="")
-parser.add_argument("--T_train"           , type=int,   default=256,   help="")
-parser.add_argument("--N_train_neighbors" , type=int,   default=512,   help="")
+parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
+parser.add_argument("--T_train"           , type=int,   default=128,   help="")
+parser.add_argument("--N_train_neighbors" , type=int,   default=256,   help="")
 
-parser.add_argument("--K_vocab"           , type=int,   default=512,   help="")
-parser.add_argument("--T_vocab_neighbors" , type=int,   default=512,   help="")
+parser.add_argument("--N_valid"           , type=int,   default=2048,  help="")
+parser.add_argument("--T_valid"           , type=int,   default=32,    help="")
+parser.add_argument("--N_valid_neighbors" , type=int,   default=1024,  help="")
 
-parser.add_argument("--N_valid"           , type=int,   default=8192,  help="")
-parser.add_argument("--T_valid"           , type=int,   default=256,   help="")
-parser.add_argument("--N_valid_neighbors" , type=int,   default=8192,  help="")
-
-parser.add_argument("--h"                 , type=int,   default=27 ,   help="")
-parser.add_argument("--tp"                , type=int,   default=2 ,    help="")
-parser.add_argument("--cur_tp"            , type=int,   default=2 ,    help="")
+parser.add_argument("--h"                 , type=int,   default=18 ,   help="")
+parser.add_argument("--tp"                , type=int,   default=16 ,   help="")
+parser.add_argument("--cur_tp"            , type=int,   default=2  ,   help="")
 parser.add_argument("--cur_portion"       , type=float, default=0.5 ,  help="")
 parser.add_argument("--division_fact"     , type=float, default=1.0 ,  help="")
 
-parser.add_argument("--train_epoch_num"   , type=int,   default=5 ,    help="")
-parser.add_argument("--valid_epoch_num"   , type=int,   default=5 ,    help="")
-parser.add_argument("--ratio_cos"         , type=float, default=0.95,  help="") 
-parser.add_argument("--ratio_cro"         , type=float, default=0.05,  help="")
-parser.add_argument("--train_converge"    , type=int,   default=2 ,    help="")
-parser.add_argument("--valid_converge"    , type=int,   default=2 ,    help="")
+parser.add_argument("--train_epoch_num"   , type=int,   default=500,   help="")
+parser.add_argument("--valid_epoch_num"   , type=int,   default=500,   help="")
+
+parser.add_argument("--train_ratio_cos"   , type=float, default=0.99,  help="") 
+parser.add_argument("--train_ratio_cro"   , type=float, default=0.01,  help="")
+parser.add_argument("--vocab_ratio_cos"   , type=float, default=1.00,  help="")
+parser.add_argument("--vocab_ratio_cro"   , type=float, default=0.00,  help="")
+
+parser.add_argument("--train_converge"    , type=int,   default=50 ,   help="")
+parser.add_argument("--valid_converge"    , type=int,   default=50 ,   help="")
 parser.add_argument("--train_graph_reset" , type=int,   default=50,    help="")
 parser.add_argument("--valid_graph_reset" , type=int,   default=50,    help="")
 
 parser.add_argument("--vis_path"          , type=str,   default='./vis2/tmp' , help="")
-parser.add_argument("--use_eu_norm"       , type=int,   default=256  , help="")
+parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
 
 args = parser.parse_args()
 
@@ -90,18 +91,16 @@ factor            = 1
 eps               = 1e-5 
 
 sample_k          = 1
-instant_writeback = args.instant_writeback  # 1
-cur_tp            = args.cur_tp  # 2
-cur_portion       = args.cur_portion  # 0.5
-use_eu_norm       = args.use_eu_norm  # 1
+cur_tp            = args.cur_tp            # 2
+cur_portion       = args.cur_portion       # 0.5
+use_eu_norm       = args.use_eu_norm       # 1
 
 # 超参数：数据集，及其分块
 N_train           = args.N_train           # 65536
 T_train           = args.T_train           # 256
 N_trnbr           = args.N_train_neighbors # 512
 
-T_vonbr           = args.T_vocab_neighbors # 512
-K_vocab           = N_vocab                # 暂时不采样
+T_vonbr           = N_train                # 512
 
 N_valid           = args.N_valid           # 8192
 T_valid           = args.T_valid           # 256
@@ -111,7 +110,7 @@ emb_size          = N_train + N_vocab + N_valid
 
 train_blocks      = make_splits(0, N_train, T_train) 
 vonbr_blocks      = make_splits(0, N_train, T_vonbr)
-valid_blocks      = make_splits(N_train + N_vocab, N_train + N_vocab + N_valid, T_valid)
+valid_blocks      = make_splits(0, N_valid, T_valid)
 
 train_loc_slice   = slice(0, N_train)
 vocab_loc_slice   = slice(N_train, N_train + N_vocab)
@@ -132,14 +131,15 @@ valid4sid         = [list(range(sid, num_valid_blocks, num_devices)) for sid in 
 loss_strategy: Dict = {
     'cos_loss'  : 'lap', # 
     'cro_loss'  : 'cro', # 
-    'converge'  : args.converge,
-    'ratio_cos' : args.ratio_cos,  
-    'ratio_cro' : args.ratio_cro    
+    'train_converge'  : args.train_converge,
+    'valid_converge'  : args.valid_converge,
+    'train_ratio_cos' : args.train_ratio_cos,  
+    'train_ratio_cro' : args.train_ratio_cro,
+    'vocab_ratio_cos' : args.vocab_ratio_cos,  
+    'vocab_ratio_cro' : args.vocab_ratio_cro,    
 }
 train_epoch_num = args.train_epoch_num # 5
 valid_epoch_num = args.valid_epoch_num # 5
-train_converge  = args.train_converge  # 2
-valid_converge  = args.valid_converge  # 2
 
 division_fact   = args.division_fact   # 1.0
 N_K             = int(h / division_fact)

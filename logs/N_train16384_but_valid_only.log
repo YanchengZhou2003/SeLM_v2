@@ -1,0 +1,128 @@
+数据集总长度：1115394
+Before CTE Training: train eu loss: 1.1381539106369019, eval eu loss: 1.4524140357971191
+Before CTE Training: train eu acc: 0.63623046875, eval eu acc: 0.5721435546875
+epoch   0 summary: valid_cos_loss : 0.026380, valid loss: 4.1930, accuracy: 0.0425
+epoch   1 summary: valid_cos_loss : 0.024614, valid loss: 4.1083, accuracy: 0.0616
+epoch   2 summary: valid_cos_loss : 0.023799, valid loss: 4.0302, accuracy: 0.0806
+epoch   3 summary: valid_cos_loss : 0.022246, valid loss: 3.9540, accuracy: 0.1019
+epoch   4 summary: valid_cos_loss : 0.021784, valid loss: 3.8776, accuracy: 0.1232
+epoch   5 summary: valid_cos_loss : 0.020288, valid loss: 3.8056, accuracy: 0.1475
+epoch   6 summary: valid_cos_loss : 0.018872, valid loss: 3.7445, accuracy: 0.1636
+epoch   7 summary: valid_cos_loss : 0.017799, valid loss: 3.6808, accuracy: 0.1788
+epoch   8 summary: valid_cos_loss : 0.017617, valid loss: 3.6283, accuracy: 0.1906
+epoch   9 summary: valid_cos_loss : 0.015974, valid loss: 3.5708, accuracy: 0.2032
+epoch  10 summary: valid_cos_loss : 0.015247, valid loss: 3.5196, accuracy: 0.2139
+epoch  11 summary: valid_cos_loss : 0.014471, valid loss: 3.4728, accuracy: 0.2262
+epoch  12 summary: valid_cos_loss : 0.013715, valid loss: 3.4300, accuracy: 0.2407
+epoch  13 summary: valid_cos_loss : 0.013109, valid loss: 3.3869, accuracy: 0.2488
+epoch  14 summary: valid_cos_loss : 0.012876, valid loss: 3.3494, accuracy: 0.2574
+epoch  15 summary: valid_cos_loss : 0.012279, valid loss: 3.3177, accuracy: 0.2590
+epoch  16 summary: valid_cos_loss : 0.011473, valid loss: 3.2843, accuracy: 0.2676
+epoch  17 summary: valid_cos_loss : 0.010930, valid loss: 3.2496, accuracy: 0.2726
+epoch  18 summary: valid_cos_loss : 0.010206, valid loss: 3.2188, accuracy: 0.2765
+epoch  19 summary: valid_cos_loss : 0.009810, valid loss: 3.1858, accuracy: 0.2855
+epoch  20 summary: valid_cos_loss : 0.009697, valid loss: 3.1624, accuracy: 0.2882
+epoch  21 summary: valid_cos_loss : 0.009091, valid loss: 3.1313, accuracy: 0.2917
+epoch  22 summary: valid_cos_loss : 0.008572, valid loss: 3.1061, accuracy: 0.2974
+epoch  23 summary: valid_cos_loss : 0.008101, valid loss: 3.0846, accuracy: 0.2996
+epoch  24 summary: valid_cos_loss : 0.008099, valid loss: 3.0616, accuracy: 0.3011
+epoch  25 summary: valid_cos_loss : 0.008109, valid loss: 3.0395, accuracy: 0.3079
+epoch  26 summary: valid_cos_loss : 0.007441, valid loss: 3.0209, accuracy: 0.3101
+epoch  27 summary: valid_cos_loss : 0.007028, valid loss: 3.0074, accuracy: 0.3120
+epoch  28 summary: valid_cos_loss : 0.006846, valid loss: 2.9856, accuracy: 0.3146
+epoch  29 summary: valid_cos_loss : 0.006660, valid loss: 2.9713, accuracy: 0.3140
+epoch  30 summary: valid_cos_loss : 0.006392, valid loss: 2.9553, accuracy: 0.3158
+epoch  31 summary: valid_cos_loss : 0.006240, valid loss: 2.9400, accuracy: 0.3204
+epoch  32 summary: valid_cos_loss : 0.005952, valid loss: 2.9229, accuracy: 0.3224
+epoch  33 summary: valid_cos_loss : 0.005657, valid loss: 2.9085, accuracy: 0.3263
+epoch  34 summary: valid_cos_loss : 0.005430, valid loss: 2.8911, accuracy: 0.3287
+epoch  35 summary: valid_cos_loss : 0.005405, valid loss: 2.8780, accuracy: 0.3311
+epoch  36 summary: valid_cos_loss : 0.005193, valid loss: 2.8681, accuracy: 0.3315
+epoch  37 summary: valid_cos_loss : 0.005075, valid loss: 2.8567, accuracy: 0.3313
+epoch  38 summary: valid_cos_loss : 0.004981, valid loss: 2.8417, accuracy: 0.3372
+epoch  39 summary: valid_cos_loss : 0.004699, valid loss: 2.8330, accuracy: 0.3389
+epoch  40 summary: valid_cos_loss : 0.004474, valid loss: 2.8251, accuracy: 0.3397
+epoch  41 summary: valid_cos_loss : 0.004444, valid loss: 2.8179, accuracy: 0.3412
+epoch  42 summary: valid_cos_loss : 0.004376, valid loss: 2.8087, accuracy: 0.3425
+epoch  43 summary: valid_cos_loss : 0.004393, valid loss: 2.8027, accuracy: 0.3444
+epoch  44 summary: valid_cos_loss : 0.004137, valid loss: 2.7934, accuracy: 0.3458
+epoch  45 summary: valid_cos_loss : 0.004040, valid loss: 2.7853, accuracy: 0.3448
+epoch  46 summary: valid_cos_loss : 0.004064, valid loss: 2.7769, accuracy: 0.3481
+epoch  47 summary: valid_cos_loss : 0.003880, valid loss: 2.7728, accuracy: 0.3488
+epoch  48 summary: valid_cos_loss : 0.003974, valid loss: 2.7675, accuracy: 0.3490
+epoch  49 summary: valid_cos_loss : 0.003698, valid loss: 2.7584, accuracy: 0.3519
+epoch  50 summary: valid_cos_loss : 0.003761, valid loss: 2.7404, accuracy: 0.3558
+epoch  51 summary: valid_cos_loss : 0.003538, valid loss: 2.7217, accuracy: 0.3585
+epoch  52 summary: valid_cos_loss : 0.003328, valid loss: 2.7033, accuracy: 0.3589
+epoch  53 summary: valid_cos_loss : 0.003134, valid loss: 2.6840, accuracy: 0.3627
+epoch  54 summary: valid_cos_loss : 0.002960, valid loss: 2.6647, accuracy: 0.3677
+epoch  55 summary: valid_cos_loss : 0.002796, valid loss: 2.6479, accuracy: 0.3699
+epoch  56 summary: valid_cos_loss : 0.002649, valid loss: 2.6332, accuracy: 0.3699
+epoch  57 summary: valid_cos_loss : 0.002507, valid loss: 2.6165, accuracy: 0.3728
+epoch  58 summary: valid_cos_loss : 0.002381, valid loss: 2.5995, accuracy: 0.3752
+epoch  59 summary: valid_cos_loss : 0.002258, valid loss: 2.5894, accuracy: 0.3779
+epoch  60 summary: valid_cos_loss : 0.002146, valid loss: 2.5747, accuracy: 0.3811
+epoch  61 summary: valid_cos_loss : 0.002042, valid loss: 2.5596, accuracy: 0.3839
+epoch  62 summary: valid_cos_loss : 0.001942, valid loss: 2.5496, accuracy: 0.3862
+epoch  63 summary: valid_cos_loss : 0.001856, valid loss: 2.5374, accuracy: 0.3870
+epoch  64 summary: valid_cos_loss : 0.001770, valid loss: 2.5242, accuracy: 0.3917
+epoch  65 summary: valid_cos_loss : 0.001697, valid loss: 2.5130, accuracy: 0.3937
+epoch  66 summary: valid_cos_loss : 0.001626, valid loss: 2.5035, accuracy: 0.3945
+epoch  67 summary: valid_cos_loss : 0.001559, valid loss: 2.4913, accuracy: 0.3956
+epoch  68 summary: valid_cos_loss : 0.001495, valid loss: 2.4812, accuracy: 0.3978
+epoch  69 summary: valid_cos_loss : 0.001438, valid loss: 2.4704, accuracy: 0.4004
+epoch  70 summary: valid_cos_loss : 0.001385, valid loss: 2.4604, accuracy: 0.4019
+epoch  71 summary: valid_cos_loss : 0.001335, valid loss: 2.4506, accuracy: 0.4032
+epoch  72 summary: valid_cos_loss : 0.001285, valid loss: 2.4446, accuracy: 0.4059
+epoch  73 summary: valid_cos_loss : 0.001241, valid loss: 2.4369, accuracy: 0.4072
+epoch  74 summary: valid_cos_loss : 0.001200, valid loss: 2.4289, accuracy: 0.4077
+epoch  75 summary: valid_cos_loss : 0.001264, valid loss: 2.4207, accuracy: 0.4126
+epoch  76 summary: valid_cos_loss : 0.001223, valid loss: 2.4151, accuracy: 0.4131
+epoch  77 summary: valid_cos_loss : 0.001187, valid loss: 2.4076, accuracy: 0.4148
+Traceback (most recent call last):
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/yancheng/SeLM_v2/src/gpt.py", line 328, in <module>
+    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/yancheng/SeLM_v2/src/gpt.py", line 305, in train_cte
+    cte.test_time_train_all(
+  File "/home/yancheng/SeLM_v2/src/gettime.py", line 118, in wrapper
+    return fn(*args, **kwargs)
+  File "/home/yancheng/SeLM_v2/src/cte.py", line 745, in test_time_train_all
+    self.epoch_barrier.wait()          # 第二阶段：整合数据
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 668, in wait
+    self._wait(timeout)
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 703, in _wait
+    if not self._cond.wait_for(lambda : self._state != 0, timeout):
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 355, in wait_for
+    self.wait(waittime)
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt
+Exception ignored in: <module 'threading' from '/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py'>
+Traceback (most recent call last):
+  File "/data5/yancheng/miniconda3/envs/lm/lib/python3.10/threading.py", line 1567, in _shutdown
+    lock.acquire()
+KeyboardInterrupt: 
+all_preparation                745.856ms
+all_preparation_2              743.909ms
+all_preparation_3                1.908ms
+epoch                         1458.284ms
+epoch_pos_train                  0.492ms
+epoch_preparation                0.132ms
+epoch_train                   1382.639ms
+epoch_valid                     74.867ms
+----------------------------------------
+all                              0.000ms
+all_preparation                745.856ms
+  all_preparation_2     99.74%
+  all_preparation_3      0.26%
+epoch                       113746.119ms
+  epoch_train           94.81%
+  epoch_valid            5.13%
+  epoch_pos_train        0.03%
+  epoch_preparation      0.01%

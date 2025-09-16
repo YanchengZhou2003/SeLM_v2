@@ -18,7 +18,7 @@ warnings.filterwarnings(
     message=r"You are using `torch\.load` with `weights_only=False`"
 )
 
-from cte import *
+from src.cte import *
 from src.para import *
 from src.utils import *
 from src.vis import *
@@ -264,32 +264,30 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     train_cache, valid_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(valid_cache)
     
     ''' debug '''
-    if args.truncate_valid > 0:
-        valid_cache['emb'] = valid_cache['emb'][:args.truncate_valid]
-        valid_cache['y'] = valid_cache['y'][:args.truncate_valid]
-        val_length = valid_cache['emb'].shape[0]
+    # if args.truncate_valid > 0:
+    #     valid_cache['emb'] = valid_cache['emb'][:args.truncate_valid]
+    #     valid_cache['y'] = valid_cache['y'][:args.truncate_valid]
+    #     val_length = valid_cache['emb'].shape[0]
     
     ### step 2: 取出数据
     gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu') # (N_vocab, n_embd), not pinned
-    sta_emb     = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
-    train_emb   = torch.cat((train_cache['emb'][:train_length - N_vocab], sta_emb.pin_memory()), dim=0)  
-                                                                                   # (N_train, n_embd), pinned memory
+    vocab_emb   = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
+    train_emb   = train_cache['emb']                                               # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
     valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory
     valid_y     = valid_cache['y']                                                 # (N_valid, ),       pinned memory
     
     ### step 2: 初始化 GPT 和 CTE
-    emb_size    = train_length + val_length
-    cte         = CritiGraph(h, tp, factor, emb_size, division_fact, loss_strategy, sample_k, epoch_num)
+    emb_size    = N_train + N_vocab + N_valid
+    cte         = CritiGraph()
     cte         = torch.compile(cte)
     cte         .eval()
     
-    
     ### step 3: 开始训练并同时测试
     #### step 3.1: 直接测 GPT 就好, 这里是在 cpu 上的，不要占 cuda 内存
-    train_logits_eu = 20. * train_cache['emb'] @ sta_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
+    train_logits_eu = 20. * train_cache['emb'] @ vocab_emb.t() # (train_length, n_embd) @ (n_embd, vocab_size) -> (train_length, vocab_size)
     train_loss_eu   = F.cross_entropy(train_logits_eu.view(-1, train_logits_eu.size(-1)), train_cache['y'], reduction='mean')
-    valid_logits_eu = 20. * valid_cache['emb'] @ sta_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
+    valid_logits_eu = 20. * valid_cache['emb'] @ vocab_emb.t() # (eval_length, n_embd) @ (n_embd, vocab_size) -> (eval_length, vocab_size)
     valid_loss_eu   = F.cross_entropy(valid_logits_eu.view(-1, valid_logits_eu.size(-1)), valid_cache['y'], reduction='mean')
 
     train_pred = train_logits_eu.argmax(dim=-1)            # (train_length,)
@@ -301,17 +299,14 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {valid_acc}")
 
     #### step 3.2: CTE 训练与测试
-    cte.train_all(
-        train_emb, valid_emb,
-        train_cache['y'], valid_cache['y'],
-        train_sample_factor=train_sample_factor,
+    # cte.train_all(
+    #     train_emb, vocab_emb, train_y
+    # )
+    cte.test_time_train_all(
+        train_emb, valid_emb, vocab_emb, valid_y,
+        f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_N_valid{N_valid}_epoch{train_epoch_num}.pt"
     )
 
-
-        # if visualization:    
-        #     visualize_similarity(model, var, iter)
-        #     torch.save(model.cte.state_dict(), cte_cktp.format(iter))
-        #     torch.save(_train_cache, train_cache_cktp.format(iter))
 
         
 
@@ -330,7 +325,7 @@ if __name__ == "__main__":
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
-    train_cte(cache_ckpt, gpt_ckpt, train_length, 4096)
+    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
     
     
     # validate_cte(

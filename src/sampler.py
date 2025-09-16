@@ -45,8 +45,9 @@ class TrainSampler(BaseSample):
     def reset_indices(self):
         randperm = torch.randperm(N_train, device=main_device)
         self.graph = self.graph[randperm]
-
-class VocabSampler(BaseSample):
+        
+'''
+class Vocab2TrainSampler(BaseSample):
     def __init__(
         self, 
     ):
@@ -68,8 +69,7 @@ class VocabSampler(BaseSample):
         dim=1)                                                                  # (B, N_vocab)
         
         return out
-
-
+'''
 
 class ValidSampler(BaseSample):
     def __init__(
