@@ -430,48 +430,49 @@ class CritiGraph(torch.nn.Module):
 
     def train_vocab_blocks(self, sid: int):
         device = devices[sid]
-        ### 先考虑 cross-entropy
-        for vonbr_block_id in vonbr4sid[sid]:
-            vonbr_block = vonbr_blocks[vonbr_block_id]          # vonbr, vocabulary neighbors, 其邻居始终是训练集的子集
-            vonbr_slice = slice(vonbr_block[0], vonbr_block[1])
+        # ### 先考虑 cross-entropy
+        # for vonbr_block_id in vonbr4sid[sid]:
+        #     vonbr_block = vonbr_blocks[vonbr_block_id]          # vonbr, vocabulary neighbors, 其邻居始终是训练集的子集
+        #     vonbr_slice = slice(vonbr_block[0], vonbr_block[1])
             
-            ### step.1 准备数据
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _cur_tar = self.train_tar[vonbr_slice]                      # (T_vonbr, )
-                _nei_loc = self.main_locations[vonbr_slice]                 # (T_vonbr, dim_ct)
-                _nei_emb = self.train_emb[vonbr_slice]                      # (T_vonbr, dim_eu)
+        #     ### step.1 准备数据
+        #     with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
+        #         _cur_tar = self.train_tar[vonbr_slice]                      # (T_vonbr, )
+        #         _nei_loc = self.main_locations[vonbr_slice]                 # (T_vonbr, dim_ct)
+        #         _nei_emb = self.train_emb[vonbr_slice]                      # (T_vonbr, dim_eu)
 
-                cur_tar, nei_loc, nei_emb = (
-                    _cur_tar.to(device, non_blocking=True),
-                    _nei_loc.to(device, non_blocking=True), 
-                    _nei_emb.to(device, non_blocking=True), 
-                )
+        #         cur_tar, nei_loc, nei_emb = (
+        #             _cur_tar.to(device, non_blocking=True),
+        #             _nei_loc.to(device, non_blocking=True), 
+        #             _nei_emb.to(device, non_blocking=True), 
+        #         )
 
-            ### step.2 计算 loss 并选择最佳位置
-            with torch.cuda.device(device), torch.cuda.stream(comp_streams[sid]):
-                comp_streams[sid].wait_stream(data_streams[sid])
+        #     ### step.2 计算 loss 并选择最佳位置
+        #     with torch.cuda.device(device), torch.cuda.stream(comp_streams[sid]):
+        #         comp_streams[sid].wait_stream(data_streams[sid])
                 
-                _loss_cro = self.loom_vocab_cro(
-                    cur_tar,
-                    self.voc_loc4sid[sid], self.cnc_loc4sid[sid], nei_loc,
-                    self.voc_emb4sid[sid], nei_emb, 
-                    sid
-                )
+        #         _loss_cro = self.loom_vocab_cro(
+        #             cur_tar,
+        #             self.voc_loc4sid[sid], self.cnc_loc4sid[sid], nei_loc,
+        #             self.voc_emb4sid[sid], nei_emb, 
+        #             sid
+        #         )
                 
-                self.voc_loss_cro[sid] += _loss_cro
+        #         self.voc_loss_cro[sid] += _loss_cro
         
-        self.voc_loss_cro[sid] = self.voc_loss_cro[sid].to(main_device)
+        # self.voc_loss_cro[sid] = self.voc_loss_cro[sid].to(main_device)
         self.epoch_barrier.wait()
         self._synchronize_all_streams()
         
         if sid == 0:
-            loss_cro = self.voc_loss_cro[0]
-            for sid in range(1, num_devices):
-                loss_cro += self.voc_loss_cro[sid]
+            # loss_cro = self.voc_loss_cro[0]
+            # for sid in range(1, num_devices):
+            #     loss_cro += self.voc_loss_cro[sid]
 
-            loss_cro /= N_train
+            # loss_cro /= N_train
             ### 再考虑 cosine-similarity
             loss_cos = self.loom_vocab_cos(self.voc_loc4sid[0], self.cnc_loc4sid[0], self.voc_emb4sid[0], sid=0)
+            loss_cro = torch.zeros_like(loss_cos)
             
             loss_tot = loss_strategy['vocab_ratio_cos'] * loss_cos + loss_strategy['vocab_ratio_cro'] * loss_cro
             selected_locs, loss_cos_T, loss_cro_T, loss_tot_T = self.get_best_loc(self.cnc_loc4sid[0], loss_cos, loss_cro, loss_tot, sid=0) # (N_vocab, ) * 3, (N_vocab, dim_ct)
