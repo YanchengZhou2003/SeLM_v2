@@ -5,13 +5,6 @@ from typing import Dict, Optional
 
 import torch
 
-# def handler(sig, frame):
-#     print("SIGINT received, force exit.")
-#     os._exit(1)
-
-# signal.signal(signal.SIGINT, handler)
-
-
 os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 
 # Parse command-line arguments
@@ -23,6 +16,7 @@ parser.add_argument("--cte_eval_iters" , type=int,   default=1,    help="CTE eva
 parser.add_argument("--ratio_cos"  , type=float, default=0.95, help="Ratio for") 
 parser.add_argument("--ratio_cro"  , type=float, default=0.05,  help="Ratio for")
 parser.add_argument("--train_length"   , type=int,   default=5120, help="Training sequence length")
+parser.add_argument("--valid_length"   , type=int,   default=5120, help="Training sequence length")
 parser.add_argument("--truncate_valid" , type=int,   default=-1 ,  help="Truncate validation set to this length; -1 means no truncation")
 parser.add_argument("--sample_factor" ,  type=float, default=1.0 , help="Sample factor for Base_Sample")
 parser.add_argument("--h" ,  type=int, default=27 , help="")
@@ -30,6 +24,8 @@ parser.add_argument("--tp" ,  type=int, default=2 , help="")
 parser.add_argument("--instant_writeback" ,  type=int, default=0 , help="")
 parser.add_argument("--N_T" ,  type=int, default=1024 , help="")
 parser.add_argument("--epoch_num" ,  type=int, default=5 , help="")
+parser.add_argument("--valid_only_epoch_num" ,  type=int, default=5 , help="")
+parser.add_argument("--minimum_binary" ,  type=int, default=5 , help="")
 parser.add_argument("--converge" ,   type=int, default=2 , help="")
 parser.add_argument("--vis_path" ,   type=str, default='./vis2/tmp' , help="")
 parser.add_argument("--cur_tp" ,   type=int, default=2 , help="")
@@ -77,6 +73,8 @@ cte_save_interval = 1
 N_T               = args.N_T
 
 train_length      = args.train_length  # 512
+valid_length      = args.valid_length  # 512
+mininum_binary    = args.minimum_binary  # 5
 
 loss_strategy: Dict = {
     'cos_loss'  : 'lap', # 
@@ -86,6 +84,7 @@ loss_strategy: Dict = {
     'ratio_cro' : args.ratio_cro    
 }
 epoch_num=args.epoch_num  # 50
+valid_only_epoch_num=args.valid_only_epoch_num  # 5
 generators = {}
 
 

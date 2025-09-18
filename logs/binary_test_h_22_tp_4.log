@@ -1,0 +1,13 @@
+usage: gpt.py [-h] [--cte_train_bs CTE_TRAIN_BS]
+              [--cte_train_iters CTE_TRAIN_ITERS] [--cte_eval_bs CTE_EVAL_BS]
+              [--cte_eval_iters CTE_EVAL_ITERS] [--ratio_cos RATIO_COS]
+              [--ratio_cro RATIO_CRO] [--train_length TRAIN_LENGTH]
+              [--valid_length VALID_LENGTH] [--truncate_valid TRUNCATE_VALID]
+              [--sample_factor SAMPLE_FACTOR] [--h H] [--tp TP]
+              [--instant_writeback INSTANT_WRITEBACK] [--N_T N_T]
+              [--epoch_num EPOCH_NUM]
+              [--valid_only_epoch_num VALID_ONLY_EPOCH_NUM]
+              [--minimum_binary MINIMUM_BINARY] [--converge CONVERGE]
+              [--vis_path VIS_PATH] [--cur_tp CUR_TP]
+              [--cur_portion CUR_PORTION] [--division_fact DIVISION_FACT]
+gpt.py: error: argument --train_length: expected one argument

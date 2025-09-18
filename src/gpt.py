@@ -152,21 +152,25 @@ class GPTLanguageModel(nn.Module):
     def get_sta_emb(self):
         return F.normalize(self.token_embedding_table.weight, dim=-1)
     
-    def forward(self, idx, targets, return_dyn_emb=False):
-        B, T, V = batch_size, block_size, vocab_size
+    def forward(self, idx, targets, return_dyn_loss=False):
+        B    = idx.size(0)
+        T, V = block_size, vocab_size
         # idx and targets are both (B,T) tensor of integers
         tok_emb = self.token_embedding_table(idx) # (B,T,E)
         # pos_emb = self.position_embedding_table(torch.arange(T, device=device)) # (T,E)
         x = tok_emb # + pos_emb # (B,T,E)
         x = self.blocks(x) # (B,T,E)
         x: torch.Tensor = self.ln_f(x) # (B,T,E)
-        if return_dyn_emb:
-            return F.normalize(x, dim=-1)
-        
         token_embeddings = self.token_embedding_table.weight  # (V, E)
         logits_eu = 20. * torch.matmul(F.normalize(x, dim=-1), F.normalize(token_embeddings, dim=-1).t()) # (B, T, V)
-        loss_eu = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T))
         
+        if return_dyn_loss:
+            dyn_emb = F.normalize(x, dim=-1)  # (B, T, E)
+            loss    = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T), reduction='none') # (B * T,)
+            acc     = (logits_eu.argmax(dim=-1) == targets)                                            # (B, T)
+            return loss.view(B, T), dyn_emb, acc
+
+        loss_eu = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T))
         return loss_eu
 
 
@@ -223,24 +227,47 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     train_y, train_emb = [], []
     eval_y, eval_emb = [], []
     cache_save_path = os.path.join(cache_path, cache_save_path)
+    train_last_token_loss = []
+    valid_last_token_loss = []
+    train_last_token_acc  = []
+    valid_last_token_acc  = []
     
     ### step 2: 迭代获取动态嵌入（dyn_emb）与数据元信息（ix）
     for _ in range(cte_train_iters):
         X_train, Y_train, _ = get_batch('train', bs=cte_train_bs, to_cuda=True)
-        dyn_emb: torch.Tensor = model(X_train, targets=Y_train, return_dyn_emb=True)
+        loss, dyn_emb, acc = model(X_train, targets=Y_train, return_dyn_loss=True) # (B, T), (B, T, E)
         train_y.append(Y_train[:, -1].cpu())
         train_emb.append(dyn_emb[:, -1, :].cpu())
+        train_last_token_loss.append(loss[:, -1].cpu()) # (B,)
+        train_last_token_acc.append(acc[:, -1].cpu())   # (B,)
     
     for _ in range(cte_eval_iters):
         X_val, Y_val, _ = get_batch('val', bs=cte_eval_bs, to_cuda=True)
-        dyn_emb: torch.Tensor = model(X_val, targets=Y_val, return_dyn_emb=True)
+        loss, dyn_emb, acc = model(X_val, targets=Y_val, return_dyn_loss=True) # (B, T), (B, T, E)
         eval_y.append(Y_val[:, -1].cpu())
         eval_emb.append(dyn_emb[:, -1, :].cpu())
+        valid_last_token_loss.append(loss[:, -1].cpu()) # (B,)
+        valid_last_token_acc.append(acc[:, -1].cpu())   # (B,)
 
+    ### step 3: 筛选 training 中 loss < 1.0 的部分，且
+    train_y_stack = torch.stack(train_y, dim=0).reshape(-1)  # (cte_train_iters * cte_train_bs)
+    train_emb_stack = torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
+    train_last_token_acc_stack = torch.cat(train_last_token_acc, dim=0) # (cte_train_iters * cte_train_bs)，这里虽然命名为 acc，但其实是 bool 值
+    # keep_indices = (train_last_token_loss_stack < 1.0)
+    keep_indices = (train_last_token_acc_stack == 1).nonzero(as_tuple=True)[0]
+    print(f"Before filtering: train cache length: {train_y_stack.shape[0]}, after filtering: {keep_indices.shape[0]}, after pow_2 filtering: ", end="")
+    ##### 为了保证一致性，我们只需要 2 的次方长度的数据
+    keep_indices = keep_indices[:2 ** int(torch.log2(torch.tensor(keep_indices.shape[0], dtype=torch.float32)).item())]
+    print(f"{keep_indices.shape[0]}")
+    
+    train_y_filtered = train_y_stack[keep_indices]
+    train_emb_filtered = train_emb_stack[keep_indices]
+    
+    
     ### step 3: 拼接并保存
     train_cache = {
-        'y': torch.stack(train_y, dim=0).reshape(-1),  # (cte_train_iters * cte_train_bs)
-        'emb': torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
+        'y': train_y_filtered,  # (cte_train_iters * cte_train_bs)
+        'emb': train_emb_filtered # (cte_train_iters * cte_train_bs, n_embd)
     }
     eval_cache = {
         'y': torch.stack(eval_y, dim=0).reshape(-1),   # (cte_eval_iters  * cte_eval_bs)
@@ -248,6 +275,30 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     }
     train_cache_length = train_cache['emb'].shape[0] 
     eval_cache_length = eval_cache['emb'].shape[0]
+    
+    ### step 4: 可视化 loss 的分布
+    train_last_token_loss = torch.cat(train_last_token_loss, dim=0).numpy()
+    valid_last_token_loss = torch.cat(valid_last_token_loss, dim=0).numpy()
+    
+    fig, ax1 = plt.subplots()
+    
+    # Train loss histogram on left y-axis
+    ax1.hist(train_last_token_loss, bins=50, alpha=0.5, color='blue', label='Train Last Token Loss')
+    ax1.set_xlim((0, 1.5))
+    ax1.set_xlabel('Loss')
+    ax1.set_ylabel('Train Frequency', color='blue')
+    ax1.tick_params(axis='y', labelcolor='blue')
+    
+    # Valid loss histogram on right y-axis
+    ax2 = ax1.twinx()
+    ax2.hist(valid_last_token_loss, bins=50, alpha=0.5, color='red', label='Valid Last Token Loss')
+    ax2.set_ylabel('Valid Frequency', color='red')
+    ax2.tick_params(axis='y', labelcolor='red')
+    
+    plt.title('Distribution of Last Token Loss')
+    fig.tight_layout()
+    plt.savefig('last_token_loss_distribution.png')
+    plt.close()
     
     print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
     save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
@@ -266,11 +317,11 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     valid_cache = load_file(os.path.join(cache_path, cache_cktp.format(val_length, 'val')), device='cpu')
     train_cache, valid_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(valid_cache)
     
-    ''' debug '''
-    if args.truncate_valid > 0:
-        valid_cache['emb'] = valid_cache['emb'][:args.truncate_valid]
-        valid_cache['y'] = valid_cache['y'][:args.truncate_valid]
-        val_length = valid_cache['emb'].shape[0]
+    # ''' debug '''
+    # if args.truncate_valid > 0:
+    #     valid_cache['emb'] = valid_cache['emb'][:args.truncate_valid]
+    #     valid_cache['y'] = valid_cache['y'][:args.truncate_valid]
+    #     val_length = valid_cache['emb'].shape[0]
     
     ### step 2: 取出数据
     gpt_weights = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu') # (N_vocab, n_embd), not pinned
@@ -324,8 +375,8 @@ if __name__ == "__main__":
     gpt_ckpt = f"normed_b{block_size}_" + "iters_{}.pth".format(3000)
     # cte_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}.pth"
     # cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache_fixed256.pth"
-    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache_onlylast.pth"
-
+    # cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_filtered_onlylast.pth"
+    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_argmax_filtered_onlylast.pth"
 
     # train_gpt(gpt_ckpt)
     # for iters in [0, 1000, 2000, 3000, 4000]:
@@ -333,7 +384,7 @@ if __name__ == "__main__":
     
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
-    train_cte(cache_ckpt, gpt_ckpt, train_length, 2048)
+    train_cte(cache_ckpt, gpt_ckpt, train_length, valid_length)
     
     
     # validate_cte(

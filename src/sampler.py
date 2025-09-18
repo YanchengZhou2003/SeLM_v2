@@ -152,7 +152,7 @@ import networkx as nx
 
 class Expander_Sampler(BaseSample):
     def __init__(self, N_train: int, N_valid: int, N_dyn: int, N_sta: int, N_T: int,
-                 splits: List[Tuple[int, int]], 
+                 train_splits: List[Tuple[int, int]], valid_splits: List[Tuple[int, int]],
                  train_emb: torch.Tensor, valid_emb: torch.Tensor,
                  ori_S: int,
                  main_device: torch.device,
@@ -173,8 +173,11 @@ class Expander_Sampler(BaseSample):
         self.voc_slice    = slice(N_dyn, N_dyn + N_sta)
         self.voc_emb      = train_emb[self.voc_slice].unsqueeze(0).repeat(self.N_T, 1, 1).to(main_device) # (T, N_sta, dim)
         
-        self.splits       = splits
-        self.block4stream = [list(range(sid, len(self.splits), num_streams)) for sid in range(num_streams)] 
+        self.cur_splits   = train_splits
+        self.train_splits = train_splits
+        self.valid_splits = valid_splits
+        
+        self.block4stream = [list(range(sid, len(self.cur_splits), num_streams)) for sid in range(num_streams)] 
         self.stream_ptr   = [0 for _ in range(num_streams)]
         self.emb          = torch.cat([train_emb.to(main_device), valid_emb.to(main_device)], dim=0)
         
@@ -188,11 +191,15 @@ class Expander_Sampler(BaseSample):
 
     def update_locations(self, main_locations: torch.Tensor):
         self.main_locations = main_locations
-        # for block in self.splits:
-        #     self._loc_cache = self.main_locations[block[0]:block[1]] # (T, D)
     
-    def new_epoch(self):
+    def new_epoch(self, mode: str):
         self.stream_ptr   = [0 for _ in range(self.num_streams)]
+        if mode == "train":
+            self.cur_splits = self.train_splits  
+            self.block4stream = [list(range(sid, len(self.cur_splits), self.num_streams)) for sid in range(self.num_streams)]
+        elif mode == "valid":
+            self.cur_splits = self.valid_splits
+            self.block4stream = [list(range(sid, len(self.cur_splits), self.num_streams)) for sid in range(self.num_streams)]      
     
     def generate_graph(self, connect_to_sta: bool = False):
         """生成 (n, c) 的邻接表；同时，为每一个块赋予对应的 (N_T, c) """
@@ -210,8 +217,6 @@ class Expander_Sampler(BaseSample):
         if connect_to_sta:
             self.S = self.S + (self.N_train - self.N_dyn)
         
-        self.valid_graph   = torch.randint(0, self.N_dyn, (self.N_valid, self.S), dtype=torch.long, device="cuda:0")
-        
         
     def get_connection(self, cur_slice: slice, cur_type: str):
         """
@@ -226,7 +231,7 @@ class Expander_Sampler(BaseSample):
             return self.graph[cur_slice] # 切片索引
         
     def generate_connections(self, expected_type: Literal["train", "valid"]):
-        for block in self.splits:
+        for block in self.cur_splits:
             cur_type = get_type(block, self.N_train, self.N_valid)
             if expected_type is not None and cur_type != expected_type:
                 continue 
@@ -248,19 +253,27 @@ class Expander_Sampler(BaseSample):
             self.graph = self.graph[randperm]
             self.generate_connections("train")
         else:
-            self.valid_graph = torch.randint(0, self.N_dyn, (self.N_valid, self.S), dtype=torch.long, device="cuda:0")
+            assert self.S <= self.N_train4valid, "当前 N_train4valid 已经小于 S_cos，无法重置"
+            valid_graph_indices = torch.randint(0, self.N_train4valid, (self.N_valid, self.S), dtype=torch.long, device="cpu")
+            self.valid_graph = torch.gather(self.train4valid, 1, valid_graph_indices).to(self.main_device) # (N_valid, S)
             self.generate_connections("valid")
 
+    def update_train4valid(self, train4valid: torch.Tensor, N_train4valid: int):
+        """
+        train4valid: (N_valid, N_train4valid) 的 LongTensor
+        """
+        self.train4valid = train4valid
+        self.N_train4valid = N_train4valid
+        
+    
     def next_block(self, sid: int) -> Tuple[Optional[int], Optional[Tuple[int, int]]]:
         if self.stream_ptr[sid] < len(self.block4stream[sid]):
             block_id = self.block4stream[sid][self.stream_ptr[sid]]
-            block    = self.splits[block_id]
+            block    = self.cur_splits[block_id]
             self.stream_ptr[sid] += 1
             return block_id, block
         return None, None
 
-    # def get_voc_loc(self) -> torch.Tensor:
-    #     return self.main_locations[self.voc_slice] # (T, N_sta, D)
     
     def get_sta_loc(self, block: Tuple[int, int]) -> torch.Tensor:
         return self.main_locations[block[0]:block[1]] # (T, D)
@@ -341,13 +354,11 @@ class Prefetcher:
             thread.start()
             self._threads.append(thread)
     
-    def new_epoch(self): 
+    def new_epoch(self):     
         for sid in range(len(self.devices)):
             self.ready_cache[sid].clear()
             self.src_hold[sid].clear()
             self._new_epoch_flag[sid] = True
-        
-        self.sampler.new_epoch()
         
         for sid in range(len(self.devices)):
             with self._cv[sid]:

@@ -19,7 +19,8 @@ from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
 from src.loom_kernel_full import ct_loss_triton
 from src.loss import compute_loss, compute_weighted_loss
 from src.para import (ED, N_T, ST, cur_portion, cur_tp, generators,
-                      instant_writeback, n_embd, vocab_size)
+                      instant_writeback, n_embd, valid_only_epoch_num,
+                      vocab_size, mininum_binary)
 from src.sampler import BaseSample, Expander_Sampler, Prefetcher
 from src.utils import *
 from src.vis import visualize_pair_bihclust, visualize_similarity
@@ -405,6 +406,11 @@ class CritiGraph(torch.nn.Module):
         assert self.N_train % N_T == 0 and self.N_valid % N_T == 0, f"N_train 和 N_valid 必须是 N_T 的整数倍，但现在是 {self.N_train}, {self.N_valid}, {N_T}"
         train_splits = make_splits(0      , self.N_train          , N_T) 
         valid_splits = make_splits(self.N_train, self.N_train + self.N_valid, N_T)
+        self.train_splits = train_splits
+        self.valid_splits = valid_splits
+        self.train4valid  = torch.arange(self.N_dyn, device="cpu", pin_memory=True).unsqueeze(0).repeat(self.N_valid, 1)  # (N_valid, N_dyn)
+        self.N_train4valid= self.N_dyn
+        self.protection   = True
         self.splits       = train_splits + valid_splits
         mark(ED, "all_preparation_1", father="all_preparation")
         
@@ -422,7 +428,7 @@ class CritiGraph(torch.nn.Module):
         
         self.sampler    = Expander_Sampler(
             self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.N_T,
-            self.splits,
+            train_splits, valid_splits,
             train_emb, valid_emb,
             int(int(math.log2(self.N_train)) ** 2 * sample_factor),
             main_device,
@@ -430,7 +436,6 @@ class CritiGraph(torch.nn.Module):
         )
         self.sampler.generate_graph(connect_to_sta=True)
         self.sampler.reset_indices("train")
-        self.sampler.reset_indices("valid")
         self.sampler.update_locations(self.main_locations)
         self.prefetcher = Prefetcher(main_device, self.devices, self.streams, self.sampler, 4)
         self.S_tot = self.sampler.S + self.N_sta
@@ -455,6 +460,9 @@ class CritiGraph(torch.nn.Module):
         self._synchronize_all_streams()
         mark(ED, "all_preparation_2", father="all_preparation")
         
+        
+        # self.match_eu()
+        # exit(0)
         
         ### step 3: 开启多线程
         mark(ST, "all_preparation_3")
@@ -485,13 +493,7 @@ class CritiGraph(torch.nn.Module):
                 "valid_cro_loss" :  0.,
                 "valid_tot_loss" :  0.,
             }
-            
-            if epoch % 50 == 0 and epoch != 0:
-                self.sampler.reset_indices("train")
-            if epoch % 10 == 0 and epoch != 0:
-                self.sampler.reset_indices("valid")
-            
-
+                
             self._synchronize_all_streams()
             mark(ED, "epoch_preparation", father="epoch")
             mark(ST, "epoch_train")
@@ -516,10 +518,24 @@ class CritiGraph(torch.nn.Module):
             #     self.main_locations[block[0]:block[1]].to(self.devices[i % self.num_devices])  
             #     for i, block in enumerate(self.splits)
             # ]
+            time.sleep(0.1)
+            
             self.voc_loc = [self.main_locations[self.sta_slice].unsqueeze(0).expand(self.N_T, -1, -1).to(dev) for dev in self.devices] # 如果出现 CUDA BUG，可以尝试把这行代码放到上面 epoch 循环的开头
             self._pending_refs = {sid: [] for sid in range(self.num_devices)}
             
             self.sampler.update_locations(self.main_locations)
+            mode = "train" if epoch < valid_only_epoch_num else "valid"
+            self.sampler.new_epoch(mode=mode)
+            
+            if mode == "train" and epoch % 25 == 0  and epoch != 0:
+                self.sampler.reset_indices("train")
+            if mode == "valid" and epoch % 50 == 0 and epoch != 0:
+                self.binary_prune_train4valid()
+                self.sampler.update_train4valid(self.train4valid, self.N_train4valid)
+            if mode == "valid" and epoch % 10 == 0  and epoch != 0:
+                self.sampler.reset_indices("valid")
+            
+            self._synchronize_all_streams()
             self.prefetcher.new_epoch()
 
             mark(ED, "epoch_pos_train", father="epoch")
@@ -559,16 +575,202 @@ class CritiGraph(torch.nn.Module):
         for thread in threads:
             thread.join()
         
+        print("还没结束，让我们进行匹配算法！")
+        ### step 4: 最终进行匹配算法
+        # self.match()
+        
         # print(kernel_ct_val_fused_cd.autotune_cache[(self.N_T, self.S_tot, 2 * self.h * self.k + 1, self.tp)]) 
         
         # self.timer.summary()
         mark(ED, "all_epoch", father="all")
         mark(ED, "all")
+
+    def binary_prune_train4valid(self):
+        if self.protection:
+            self.protection = False
+            print(f"首次匹配，保护当前 train4valid 不变。但下次你就没这么好运了！以及，当前的 N_train4valid = {self.N_train4valid}，S_cos = {self.S_cos}")
+            return
+        
+        if self.N_train4valid // 2 < self.S_cos:
+            print(f"当前 N_train4valid = {self.N_train4valid}，已经小于 S_cos = {self.S_cos}，但还得看看 mininum_binary = {mininum_binary}")
+            if self.N_train4valid // 2 < mininum_binary:
+                print(f"已经小于等于 mininum_binary = {mininum_binary}，无法继续匹配了！")
+                return
+            else:
+                print(f"已经小于等于 S_cos = {self.S_cos}，但还大于 mininum_binary = {mininum_binary}，那只能改动 S_cos 了！")
+                self.S_cos = self.N_train4valid // 2
+                self.sampler.S = self.S_cos
+                self.S_tot = self.S_cos + self.N_sta
+                self.eu_norm = [
+                    torch.cat([
+                        torch.ones((self.N_T, self.S_cos), device=device) ,
+                        torch.ones((self.N_T, self.N_sta), device=device) * 20.
+                    ], dim=1)
+                    for device in self.devices
+                ]
         
         
-    
+        new_N_train4valid = self.N_train4valid // 2
+
+        for i, valid_block in enumerate(self.valid_splits):
+            valid_loc = self.main_locations[valid_block[0]:valid_block[1]]  # (T, D)
+            train_indices = self.train4valid[valid_block[0] - self.N_train : valid_block[1] - self.N_train, :].to(main_device) # (T, N_train4valid)
+            train_blocks = make_splits(0, self.N_train4valid, self.N_T)
+            
+            all_ct_val = []
+            
+            for j, train_block in enumerate(train_blocks):
+                cur_train_indices = train_indices[:, train_block[0]:train_block[1]] # (T, T')
+                train_loc = self.main_locations[cur_train_indices] # (T, T', D)
+                ct_val = self.distance(
+                    valid_loc[:, None, :], # (T, 1, D) 
+                    train_loc[:, :, :],    # (T, T', D)
+                    torch.ones((1, 1, 1), device=main_device, dtype=torch.float32) # (1, 1, 1)
+                ).mean(dim=-1) # (T, T')
+                all_ct_val.append(ct_val)
+            
+            all_ct_val = torch.cat(all_ct_val, dim=1) # (T, N_train4valid)
+            sorted_indices = all_ct_val.argsort(dim=1, descending=True) # (T, N_train4valid)
+            new_train4valid = torch.gather(
+                train_indices, 1, sorted_indices[:, :new_N_train4valid]
+            ) # (T, new_N_train4valid)
+            # print(valid_block[0] - self.N_train, valid_block[1] - self.N_train, new_N_train4valid)
+            self.train4valid[valid_block[0] - self.N_train : valid_block[1] - self.N_train, :new_N_train4valid] = new_train4valid.clone().cpu().pin_memory()
+        
+        self._synchronize_all_streams() 
+        self.N_train4valid = new_N_train4valid
+        self.train4valid = self.train4valid[:, :self.N_train4valid]
+        
+        print(f"完成匹配，当前 N_train4valid = {self.N_train4valid}，S_cos = {self.S_cos}")
+        
+    '''
+        def match(self):
+            topk_losses = []
+            real_losses = []
+            
+            for i, block in enumerate(self.splits):
+                if block[0] < self.N_train:
+                    continue
+                cur_type   = get_type(block, self.N_train, self.N_valid) # 一定是 valid
+                valid_loc  = self.main_locations[block[0]:block[1]]  # (T, D)
+                vocab_loc  = self.main_locations[self.sta_slice]     # (V, D)
+                cur_tar    = self.tar_splits[i].to(main_device)      # (T, )
+                all_val    = []
+                
+                ### 遍历所有训练过的 token
+                for j, train_block in enumerate(self.splits):
+                    if train_block[0] >= self.N_train:
+                        break
+                    if train_block[1] > self.N_dyn:
+                        train_block = (train_block[0], self.N_dyn)
+                        
+                    train_loc = self.main_locations[train_block[0]:train_block[1]]     
+                    topk_ct_val    = self.distance(
+                        valid_loc[:, None, :], # (T, 1, D) 
+                        train_loc[None, :, :], # (1, V, D)
+                        torch.ones((1, 1, 1), device=main_device, dtype=torch.float32) # (1, 1, 1)
+                    ).mean(dim=-1) # (T, V)
+                    all_val.append(topk_ct_val)         
+                
+                all_val = torch.cat(all_val, dim=1) # (T, N_dyn)
+                
+                ### 找到前 256 个最接近的
+                topk_indices = all_val.topk(256, dim=-1).indices # (T, 256)
+                
+                ### 把它们的 locations 拿出来
+                topk_loc     = self.main_locations[topk_indices.view(-1)].view(topk_indices.size(0), topk_indices.size(1), -1) # (T, 256, D)
+                
+                ### 获取它们与静态 embedding 的距离（其实也就是 CT Space 的 logits，然后得到 loss)
+                topk_ct_val       = self.distance(
+                    topk_loc[:, :, None, :], # (T, 256, 1, D) 
+                    vocab_loc[None, None, :, :], # (1, 1, V, D)
+                    20. * torch.ones((1, 1, 1, 1), device=main_device, dtype=torch.float32) # (1, 1, 1, 1)
+                ).mean(dim=-1) # (T, 256, V)
+                topk_loss         = F.cross_entropy(topk_ct_val.view(self.N_T * 256, -1), cur_tar[:, None].expand(-1, 256).reshape(-1), reduction='none').reshape(self.N_T, 256) # (T, 256)
+                
+                topk_losses.append(topk_loss.cpu())
+                
+                ### 自己原本 locations 的 loss 也要算
+                real_ct_val = self.distance(
+                    valid_loc[:, None, :], # (T, 1, D) 
+                    vocab_loc[None, :, :], # (1, V, D)
+                    20. * torch.ones((1, 1, 1), device=main_device, dtype=torch.float32) # (1, 1, 1)
+                ).mean(dim=-1) # (T, V)
+                real_loss   = F.cross_entropy(real_ct_val, cur_tar, reduction='none')
+                
+                real_losses.append(real_loss.cpu()) # (T, )
+            
+            topk_losses = torch.cat(topk_losses, dim=0).numpy() # (N_valid, 256)
+            real_losses = torch.cat(real_losses, dim=0).numpy() # (N_valid, )
+            
+            assert topk_losses.shape[0] == real_losses.shape[0] == self.N_valid
+            
+            result = {
+                "real_losses": real_losses,
+                "topk_losses": topk_losses,
+            }
+            
+            np.savez_compressed(f"./analysis/N_train_{self.N_train}_N_valid_{self.N_valid}_losses.npz", **result)
+                
+        def match_eu(self):
+            topk_losses = []
+            real_losses = []
+            
+            for i, block in enumerate(self.splits):
+                if block[0] < self.N_train:
+                    continue
+                cur_type   = get_type(block, self.N_train, self.N_valid) # 一定是 valid
+                valid_emb  = self.sampler.emb[block[0]:block[1]]  # (T, dim)
+                vocab_emb  = self.sampler.emb[self.sta_slice]     # (V, D)
+                cur_tar    = self.tar_splits[i].to(main_device)      # (T, )
+                all_val    = []
+                
+                ### 遍历所有训练过的 token
+                for j, train_block in enumerate(self.splits):
+                    if train_block[0] >= self.N_train:
+                        break
+                    if train_block[1] > self.N_dyn:
+                        train_block = (train_block[0], self.N_dyn)
+                        
+                    train_emb = self.sampler.emb[train_block[0]:train_block[1]]     
+                    topk_eu_val = valid_emb @ train_emb.transpose(-1, -2)  # (T, N_dyn)
+                    all_val.append(topk_eu_val)         
+                
+                all_val = torch.cat(all_val, dim=1) # (T, N_dyn)
+                
+                ### 找到前 256 个最接近的
+                topk_indices = all_val.topk(256, dim=-1).indices # (T, 256)
+                
+                ### 把它们的 locations 拿出来
+                topk_emb     = self.sampler.emb[topk_indices.view(-1)].view(topk_indices.size(0), topk_indices.size(1), -1) # (T, 256, D)
+                
+                ### 获取它们与静态 embedding 的距离（其实也就是 CT Space 的 logits，然后得到 loss)
+                topk_eu_val  = 20. * topk_emb @ vocab_emb.transpose(-1, -2)  # (T, 256, V)
+                topk_loss    = F.cross_entropy(topk_eu_val.view(self.N_T * 256, -1), cur_tar[:, None].expand(-1, 256).reshape(-1), reduction='none').reshape(self.N_T, 256) # (T, 256)
+                
+                topk_losses.append(topk_loss.cpu())
+                
+                ### 自己原本 locations 的 loss 也要算
+                real_eu_val = 20. * valid_emb @ vocab_emb.transpose(-1, -2)  # (T, V)
+                real_loss   = F.cross_entropy(real_eu_val, cur_tar, reduction='none')
+
+                real_losses.append(real_loss.cpu()) # (T, )
+            
+            topk_losses = torch.cat(topk_losses, dim=0).numpy() # (N_valid, 256)
+            real_losses = torch.cat(real_losses, dim=0).numpy() # (N_valid, )
+            
+            assert topk_losses.shape[0] == real_losses.shape[0] == self.N_valid
+            
+            result = {
+                "real_losses": real_losses,
+                "topk_losses": topk_losses,
+            }
+            
+            np.savez_compressed(f"./analysis/EU_N_train_{self.N_train}_N_valid_{self.N_valid}_losses.npz", **result)
+    '''
+
     def validate(self, epoch):
-        loss = {"train": 0., "valid": 0.}
+        loss     = {"train": 0., "valid": 0.}
         accuracy = {"train": 0., "valid": 0.}
         if epoch % 10 != 0 and epoch != 0:
             return
@@ -600,9 +802,10 @@ class CritiGraph(torch.nn.Module):
             print(f"{cur_type:5s} loss: {loss[cur_type]:.4f}, accuracy: {accuracy[cur_type]:.4f}", end=", ")
 
         print()
+        sys.stdout.flush()
     
     def visualize(self, epoch: int):
-        if (epoch ) % 50 == 0 or epoch == self.epoch_num - 1:
+        if (epoch ) % 100 == 0 or epoch == self.epoch_num - 1:
             train_eu_emb = self.sampler.emb[:256]                           # (256, dim)
             valid_eu_emb = self.sampler.emb[self.N_train:self.N_train+256]  # (256, dim)
             S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
@@ -617,7 +820,8 @@ class CritiGraph(torch.nn.Module):
             visualize_pair_bihclust(S_vt_eu, S_vt_ct, meta_name="{}" + "valid_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
 
     def _synchronize_all_streams(self):
-        torch.cuda.synchronize()
+        for dev in [self.main_device] + self.devices:
+            torch.cuda.synchronize(dev)
         torch.cuda.default_stream(main_device).synchronize()
         for sid in range(self.num_devices):
             self.streams[sid].synchronize()
