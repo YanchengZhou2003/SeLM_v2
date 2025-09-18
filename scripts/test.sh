@@ -1,9 +1,11 @@
-python -m src.gpt --train_length 1048576 --truncate_valid 8192 --ratio_cos 0.993 --ratio_cro 0.007 --sample_factor 0.4 --h 27 > logs/test_h_27.log 2>&1 &
-python -m src.gpt --train_length 1048576 --truncate_valid 8192 --ratio_cos 0.993 --ratio_cro 0.007 --sample_factor 0.4 --h 23 > logs/test_h_23.log 2>&1 &
-wait
-python -m src.gpt --train_length 1048576 --truncate_valid 8192 --ratio_cos 0.993 --ratio_cro 0.007 --sample_factor 0.4 --h 20 > logs/test_h_20.log 2>&1 &
-python -m src.gpt --train_length 1048576 --truncate_valid 8192 --ratio_cos 0.993 --ratio_cro 0.007 --sample_factor 0.4 --h 18 > logs/test_h_18.log 2>&1 &
-wait
-python -m src.gpt --train_length 1048576 --truncate_valid 8192 --ratio_cos 0.993 --ratio_cro 0.007 --sample_factor 0.4 --h 16 > logs/test_h_16.log 2>&1 &
-python -m src.gpt --train_length 1048576 --truncate_valid 8192 --ratio_cos 0.993 --ratio_cro 0.007 --sample_factor 0.4 --h 14 > logs/test_h_14.log 2>&1 &
-wait
+python -m src.gpt  \
+    --N_train 8192 --T_train 512 --N_ttnbr 256 --N_tvnbr 65 --K_vocab 65 \
+    --N_vocab 65   --T_vocab 65  --N_vtnbr 16  --N_vvnbr 65  \
+    --N_valid 8192 --T_valid 512 --N_vanbr 256 \
+    --h 18 --tp 16 --cur_tp 4 --cur_portion 0.5 --division_fact 1.0 \
+    --train_epoch_num 300 --valid_epoch_num 300 --train_ratio_cos 0.9996 --train_ratio_cro 0.0004 \
+    --train_converge 100 --valid_converge 100 \
+    --train_graph_reset 25 --vocab_graph_reset 25 --valid_graph_reset 25 \
+    --train_only 0 --valid_only 0 \
+    --val_interval 10 --vis_interval 100 \
+    --use_eu_norm 0

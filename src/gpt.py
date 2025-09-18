@@ -306,7 +306,6 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     if not train_only:
         cte.test_time_train_all(
             train_emb, valid_emb, vocab_emb, valid_y,
-            f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_N_valid{N_valid}_epoch{train_epoch_num}.pt"
         )
 
 

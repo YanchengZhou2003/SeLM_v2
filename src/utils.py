@@ -1315,3 +1315,33 @@ def gather_idx_and_emb(train_idx: torch.Tensor, train_emb: torch.Tensor, idx2d: 
     flat_emb = train_emb.index_select(0, flat)     # (T*S, dim)
     pos_emb = flat_emb.view(T, S, train_emb.size(1))
     return pos_idx, pos_emb
+
+
+import os
+import traceback
+import functools
+
+import sys
+
+def in_debug_mode() -> bool:
+    # 环境变量优先，其次检查 debugpy
+    if os.environ.get("DEBUG_MODE", "0") == "1":
+        return True
+    return "debugpy" in sys.modules
+
+
+import traceback, functools, os, sys
+
+def thread_guard(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if in_debug_mode():
+            return func(*args, **kwargs)
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            print(f"Exception in {func.__name__}: {e}")
+            traceback.print_exc()
+            os._exit(1)
+    return wrapper
+
