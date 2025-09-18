@@ -1,6 +1,21 @@
 {
   "version": "0.2.0",
   "configurations": [
+    { 
+      "name": "GPT-generate",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.gpt",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "args": [
+
+      ],
+      "env": {
+
+      },
+    },
+
     {
       "name": "GPT-debug",
       "type": "debugpy",

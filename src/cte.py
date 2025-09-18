@@ -915,10 +915,23 @@ class CritiGraph(torch.nn.Module):
     def visualize(self, epoch: int, cur_type: str):
         if cur_type == "train":
             train_eu_emb = self.train_emb[:256]                           # (256, dim)
-            train_ct_emb = self.train_locations[0:256]                              # (256, tp)
+            train_ct_emb = self.train_locations[:256]                    # (256, tp)
+            vocab_eu_emb = self.vocab_emb[:256]                           # (256, dim)
+            vocab_ct_emb = self.vocab_locations[:256]                    # (256, tp)
+            
             S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
             S_tt_ct      = self.cos_similarity(train_ct_emb[:, None, :], train_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
             visualize_similarity(S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            
+            S_vv_eu      = normalized_matmul(vocab_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            S_vv_ct      = self.cos_similarity(vocab_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            visualize_similarity(S_vv_eu, S_vv_ct, meta_name="{}" + "vocab_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            
+            S_tv_eu      = normalized_matmul(train_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            S_tv_ct      = self.cos_similarity(train_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            visualize_pair_bihclust(S_tv_eu, S_tv_ct, meta_name="{}" + "train_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            
+            
 
         elif cur_type == "valid":
             train_eu_emb = self.train_emb[:256]                        # (256, dim)

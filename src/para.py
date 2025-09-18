@@ -7,7 +7,7 @@ import torch
 
 from src.utils import make_splits
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 main_device = torch.device('cuda:0')
 devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 num_devices = len(devices)
@@ -68,16 +68,16 @@ parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
 args = parser.parse_args()
 
 # wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-with open('./data/input.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
-chars = sorted(list(set(text)))
-N_vocab = len(chars)
-assert N_vocab == args.N_vocab, f"实际 N_vocab={N_vocab}, 需与设定值 {args.N_vocab} 一致"
+# with open('./data/input.txt', 'r', encoding='utf-8') as f:
+#     text = f.read()
+# chars = sorted(list(set(text)))
+# N_vocab = len(chars)
+# assert N_vocab == args.N_vocab, f"实际 N_vocab={N_vocab}, 需与设定值 {args.N_vocab} 一致"
 
 # 超参数：GPT
 batch_size        = 64    
 block_size        = 256
-max_iters         = 4000
+max_iters         = 10000
 val_max_iters     = 1000
 gpt_save_interval = 1000
 learning_rate     = 3e-4
@@ -212,7 +212,6 @@ def set_seed(seed: int = 42, deterministic: bool = True, benchmark: bool = False
 
 set_seed(42, deterministic=True, benchmark=False)
 
-print(f"数据集总长度：{len(text)}")
 
 
 # 额外内容
