@@ -397,7 +397,7 @@ if __name__ == "__main__":
     
     
     gpt_ckpt = gpt_ckpt.format(3999)
-    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_new_cache_onlylast_onlygood.pth"
+    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_new_cache_onlylast_onlygood_filtered.pth"
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
     train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
