@@ -378,9 +378,9 @@ if __name__ == "__main__":
     # for iters in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 9999]:
     #     eval_gpt(gpt_ckpt.format(iters))
     
-    get_cte_train_and_test(gpt_ckpt, cache_ckpt)
+    # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
-    # train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
+    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
     
     
     # validate_cte(

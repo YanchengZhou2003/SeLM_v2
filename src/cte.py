@@ -558,7 +558,7 @@ class CritiGraph(torch.nn.Module):
             
             ### step.1 准备数据
             with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _pos_idx = self.valid_sampler.get_cos_connection(valid_block)   # (T_valid, N_vanbr)
+                _pos_idx = self.valid_sampler.get_cos_connection(valid_block)# (T_valid, N_vanbr)
 
                 _sta_loc = self.valid_locations[valid_slice]                 # (T_valid, dim_ct)
                 _pos_loc = self.train_locations[_pos_idx]                    # (T_valid, N_vanbr, dim_ct)
@@ -608,8 +608,8 @@ class CritiGraph(torch.nn.Module):
             
             ### step 1: 考虑 train_blocks
             self.train_train_blocks(sid)
-            self.epoch_barrier.wait()
-            self._synchronize_all_streams()
+            # self.epoch_barrier.wait()
+            # self._synchronize_all_streams()
             
             ### step 2: 考虑 vocab_blocks
             self.train_vocab_blocks(sid)
@@ -702,7 +702,7 @@ class CritiGraph(torch.nn.Module):
             mark(ST, "epoch_train")
             
             self.epoch_barrier.wait()          # 第一阶段：train_train
-            self.epoch_barrier.wait()          # 第二阶段：train_vocab        
+            # self.epoch_barrier.wait()          # 第二阶段：train_vocab        
             self.epoch_barrier.wait()          # 第三阶段：整合数据
             
             mark(ED, "epoch_train", father="epoch")

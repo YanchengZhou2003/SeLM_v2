@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 7, in <module>
+    import torch
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/torch/__init__.py", line 367, in <module>
+    from torch._C import *  # noqa: F403
+  File "<frozen importlib._bootstrap>", line 216, in _lock_unlock_module
+KeyboardInterrupt

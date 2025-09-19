@@ -1,0 +1,101 @@
+分词器已加载，词汇表大小: 8192
+Before CTE Training: train eu loss: 0.6815492510795593, eval eu loss: 5.025336265563965
+Before CTE Training: train eu acc: 1.0, eval eu acc: 0.2396240234375
+epoch   0 summary: train_cos_loss : 0.029869, train_cro_loss : 8.1963, train_tot_loss : 0.1115, vocab_cos_loss : 0.004209, 
+train loss: 8.7723, accuracy: 0.0692
+epoch   1 summary: train_cos_loss : 0.028950, train_cro_loss : 7.3371, train_tot_loss : 0.1020, vocab_cos_loss : 0.004108, 
+epoch   2 summary: train_cos_loss : 0.028735, train_cro_loss : 6.2915, train_tot_loss : 0.0914, vocab_cos_loss : 0.003900, 
+epoch   3 summary: train_cos_loss : 0.028302, train_cro_loss : 5.7531, train_tot_loss : 0.0855, vocab_cos_loss : 0.003260, 
+epoch   4 summary: train_cos_loss : 0.027824, train_cro_loss : 5.2422, train_tot_loss : 0.0800, vocab_cos_loss : 0.002877, 
+epoch   5 summary: train_cos_loss : 0.026420, train_cro_loss : 4.6142, train_tot_loss : 0.0723, vocab_cos_loss : 0.002707, 
+epoch   6 summary: train_cos_loss : 0.025448, train_cro_loss : 3.9974, train_tot_loss : 0.0652, vocab_cos_loss : 0.002421, 
+epoch   7 summary: train_cos_loss : 0.025537, train_cro_loss : 3.9538, train_tot_loss : 0.0648, vocab_cos_loss : 0.002359, 
+epoch   8 summary: train_cos_loss : 0.024647, train_cro_loss : 3.2486, train_tot_loss : 0.0569, vocab_cos_loss : 0.002276, 
+epoch   9 summary: train_cos_loss : 0.024167, train_cro_loss : 3.0034, train_tot_loss : 0.0540, vocab_cos_loss : 0.002192, 
+epoch  10 summary: train_cos_loss : 0.023796, train_cro_loss : 2.8499, train_tot_loss : 0.0521, vocab_cos_loss : 0.002281, 
+train loss: 4.7015, accuracy: 0.4434
+Traceback (most recent call last):
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 383, in <module>
+    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 357, in train_cte
+    cte.train_all(
+  File "/data3/gc/SeLM_v2/src/gettime.py", line 118, in wrapper
+    return fn(*args, **kwargs)
+  File "/data3/gc/SeLM_v2/src/cte.py", line 745, in train_all
+    self.visualize(cur_epoch, "train")
+  File "/data3/gc/SeLM_v2/src/cte.py", line 928, in visualize
+    visualize_similarity(S_vv_eu, S_vv_ct, meta_name="{}" + "vocab_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+  File "/data3/gc/SeLM_v2/src/vis.py", line 96, in visualize_similarity
+    fig.savefig(sim_ct_path, dpi=300, bbox_inches="tight")
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/figure.py", line 3490, in savefig
+    self.canvas.print_figure(fname, **kwargs)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2184, in print_figure
+    result = print_method(
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/backend_bases.py", line 2040, in <lambda>
+    print_method = functools.wraps(meth)(lambda *args, **kwargs: meth(
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 481, in print_png
+    self._print_pil(filename_or_obj, "png", pil_kwargs, metadata)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 429, in _print_pil
+    FigureCanvasAgg.draw(self)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/backends/backend_agg.py", line 382, in draw
+    self.figure.draw(self.renderer)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/artist.py", line 94, in draw_wrapper
+    result = draw(artist, renderer, *args, **kwargs)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/artist.py", line 71, in draw_wrapper
+    return draw(artist, renderer)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/figure.py", line 3257, in draw
+    mimage._draw_list_compositing_images(
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/image.py", line 134, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/artist.py", line 71, in draw_wrapper
+    return draw(artist, renderer)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/axes/_base.py", line 3181, in draw
+    mimage._draw_list_compositing_images(
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/image.py", line 134, in _draw_list_compositing_images
+    a.draw(renderer)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/artist.py", line 71, in draw_wrapper
+    return draw(artist, renderer)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/image.py", line 599, in draw
+    im, l, b, trans = self.make_image(
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/image.py", line 902, in make_image
+    return self._make_image(self._A, bbox, transformed_bbox, clip,
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/image.py", line 519, in _make_image
+    output = self.to_rgba(output, bytes=True, norm=False)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/colorizer.py", line 356, in to_rgba
+    return self._colorizer.to_rgba(x, alpha=alpha, bytes=bytes, norm=norm)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/colorizer.py", line 158, in to_rgba
+    rgba = self.cmap(x, alpha=alpha, bytes=bytes)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/colors.py", line 739, in __call__
+    rgba, mask = self._get_rgba_and_mask(X, alpha=alpha, bytes=bytes)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/matplotlib/colors.py", line 795, in _get_rgba_and_mask
+    lut = (lut * 255).astype(np.uint8)
+KeyboardInterrupt
+Exception ignored in: <module 'threading' from '/data/gc/anaconda3/envs/lm/lib/python3.10/threading.py'>
+Traceback (most recent call last):
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/threading.py", line 1567, in _shutdown
+    lock.acquire()
+KeyboardInterrupt: 
+all_preparation              13128.037ms
+all_preparation_2            13126.438ms
+all_preparation_3                1.574ms
+epoch                         9264.339ms
+epoch_pos_train                  1.741ms
+epoch_preparation                4.601ms
+epoch_train                   9245.274ms
+epoch_valid                     12.146ms
+----------------------------------------
+all                              0.000ms
+all_preparation              13128.037ms
+  all_preparation_2     99.99%
+  all_preparation_3      0.01%
+epoch                       101907.729ms
+  epoch_train           99.79%
+  epoch_valid            0.13%
+  epoch_preparation      0.05%
+  epoch_pos_train        0.02%
