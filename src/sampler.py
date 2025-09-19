@@ -31,14 +31,16 @@ class TrainSampler(BaseSample):
         
         """
         super().__init__()
-        train_train_graph: List[List[int]] = []
-        G = ig.Graph.K_Regular(n=N_train, k=N_ttnbr, directed=False, multiple=False)
-        for node in range(N_train):
-            neighbors = list(G.neighbors(node))
-            assert len(neighbors) == N_ttnbr, f"节点 {node} 邻居数 != {N_ttnbr}"
-            train_train_graph.append(neighbors)
-        self.train_train_graph = torch.tensor(train_train_graph, dtype=torch.long, device=main_device) # (N_train, T_trnbr)
-        self.train_vocab_graph = torch.randint(0, N_vocab, (N_train, N_tvnbr), device=main_device)     # (N_train, T_trnbr)
+        # train_train_graph: List[List[int]] = []
+        # G = ig.Graph.K_Regular(n=N_train, k=N_ttnbr, directed=False, multiple=False)
+        # for node in range(N_train):
+        #     neighbors = list(G.neighbors(node))
+        #     assert len(neighbors) == N_ttnbr, f"节点 {node} 邻居数 != {N_ttnbr}"
+        #     train_train_graph.append(neighbors)
+        # self.train_train_graph = torch.tensor(train_train_graph, dtype=torch.long, device=main_device) # (N_train, T_trnbr)
+        assert N_train == N_ttnbr, f"N_train 必须等于 N_ttnbr, 当前 {N_train} != {N_ttnbr}"
+        self.train_train_graph = torch.arange(N_train, device=main_device).unsqueeze(0).repeat(N_train, 1)
+        # self.train_vocab_graph = torch.randint(0, N_vocab, (N_train, N_tvnbr), device=main_device)     # (N_train, T_trnbr)
             
     def get_cos_connection(self, block: Tuple[int, int], cur_type="train_train") -> torch.Tensor:
         if cur_type == "train_train":
@@ -49,14 +51,15 @@ class TrainSampler(BaseSample):
             raise ValueError(f"Unsupported cur_type: {cur_type}")
     
     def get_cro_connection(self, cur_tar: torch.Tensor) -> torch.Tensor:
-        voc_idx = torch.randint(0, N_vocab, (T_train, K_vocab - 1), device=main_device, dtype=torch.long)
-        out     = torch.cat([cur_tar[:, None], voc_idx], dim=1) # (T_train, K_vocab)
+        # voc_idx = torch.randint(0, N_vocab, (T_train, K_vocab - 1), device=main_device, dtype=torch.long)
+        # out     = torch.cat([cur_tar[:, None], voc_idx], dim=1) # (T_train, K_vocab)
+        out       = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(cur_tar.shape[0], 1)
         return out
         
     def reset_indices(self):
         randperm = torch.randperm(N_train, device=main_device)
-        self.train_train_graph = self.train_train_graph[randperm]
-        self.train_vocab_graph = torch.randint(0, N_vocab, (N_train, N_tvnbr), device=main_device)
+        # self.train_train_graph = self.train_train_graph[randperm]
+        # self.train_vocab_graph = torch.randint(0, N_vocab, (N_train, N_tvnbr), device=main_device)
 
 
 class VocabSampler(BaseSample):
@@ -77,7 +80,7 @@ class VocabSampler(BaseSample):
         if N_vocab % 2 != 0:
             self.vocab_vocab_graph[self.vocab_vocab_graph == N_vocab] = 0
         
-        self.vocab_train_graph = torch.randint(0, N_train, (N_vocab, N_vtnbr), device=main_device)     # (N_vocab, T_vtnbr)
+        # self.vocab_train_graph = torch.randint(0, N_train, (N_vocab, N_vtnbr), device=main_device)     # (N_vocab, T_vtnbr)
             
     def get_cos_connection(self, block: Tuple[int, int], cur_type="vocab_vocab") -> torch.Tensor:
         if cur_type == "vocab_vocab":
@@ -90,7 +93,7 @@ class VocabSampler(BaseSample):
     def reset_indices(self):
         randperm = torch.randperm(N_vocab, device=main_device)
         self.vocab_vocab_graph = self.vocab_vocab_graph[randperm]
-        self.vocab_train_graph = torch.randint(0, N_train, (N_vocab, N_vtnbr), device=main_device)
+        # self.vocab_train_graph = torch.randint(0, N_train, (N_vocab, N_vtnbr), device=main_device)
 
 
 class ValidSampler(BaseSample):
@@ -100,14 +103,16 @@ class ValidSampler(BaseSample):
         """
         """
         super().__init__()
-        self.graph = torch.randint(0, N_train, (N_valid, N_vanbr), device=main_device) # (N_valid, N_vanbr)
-            
+        # self.graph = torch.randint(0, N_train, (N_valid, N_vanbr), device=main_device) # (N_valid, N_vanbr)
+        assert N_vanbr == N_train, f"N_vanbr 必须等于 N_train, 当前 {N_vanbr} != {N_train}"
+        self.graph = torch.arange(N_train, device=main_device).unsqueeze(0).repeat(N_valid, 1)
+          
     def get_cos_connection(self, block: Tuple[int, int]) -> torch.Tensor:
         return self.graph[block[0]:block[1]] 
 
     def reset_indices(self):
-        self.graph = torch.randint(0, N_train, (N_valid, N_vanbr), device=main_device) # (N_valid, N_vanbr)
-
+        # self.graph = torch.randint(0, N_train, (N_valid, N_vanbr), device=main_device) # (N_valid, N_vanbr)
+        self.graph = torch.arange(N_train, device=main_device).unsqueeze(0).repeat(N_valid, 1)
 
 if __name__ == "__main__":
     pass

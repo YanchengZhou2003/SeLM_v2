@@ -146,55 +146,53 @@ class CritiGraph(torch.nn.Module):
 
     def loom_train(
         self, 
+        cur_tar: torch.Tensor,   # (T_train, )
+        
         cnc_loc: torch.Tensor,   # (T_train, N_C    , dim_ct)
         
         sta_loc: torch.Tensor,   # (T_train, dim_ct)
         ttn_loc: torch.Tensor,   # (T_train, N_ttnbr, dim_ct)
-        tvn_loc: torch.Tensor,   # (T_train, N_tvnbr, dim_ct)
         voc_loc: torch.Tensor,   # (T_train, K_vocab, dim_ct)
 
         sta_emb: torch.Tensor,   # (T_train, dim_eu)
         ttn_emb: torch.Tensor,   # (T_train, N_ttnbr, dim_eu)
-        tvn_emb: torch.Tensor,   # (T_train, N_tvnbr, dim_eu)
         voc_emb: torch.Tensor,   # (T_train, K_vocab, dim_eu)
         
         mask   : torch.Tensor,   # (T_train, N_ttnbr + N_tvnbr)
         sid    : int = 0,
     ) -> Tuple[torch.Tensor, torch.Tensor,]:
-        device = devices[sid]
-        nei_loc    = torch.cat([ttn_loc, tvn_loc], dim=1)  # (T_train, N_ttnbr + N_tvnbr, dim_ct)
-        nei_emb    = torch.cat([ttn_emb, tvn_emb], dim=1)  # (T_train, N_ttnbr + N_tvnbr, dim_eu)
+        device  = devices[sid]
+        pos_loc = torch.cat([ttn_loc, voc_loc], dim=1)  # (T_train, N_ttnbr + K_vocab, dim_ct)
+        pos_emb = torch.cat([ttn_emb, voc_emb], dim=1)  # (T_train, N_ttnbr + K_vocab, dim_eu)
         
         ### step 1: 计算欧氏空间的相似度
-        eu_cos_val = (F.normalize(sta_emb[:, None, :], dim=-1) @ F.normalize(nei_emb, dim=-1).transpose(-1, -2)).squeeze()  
-            ### (T_train, 1, dim_eu) @ (T_train, dim_eu, N_ttnbr + N_tvnbr) -> (T_train, 1, N_ttnbr + N_tvnbr) -> (T_train, N_ttnbr + N_tvnbr)
+        eu_val = 20. * temperature * (sta_emb[:, None, :] @ pos_emb.transpose(-1, -2)).squeeze()  
+            ### (T_train, 1, dim_eu) @ (T_train, dim_eu, N_ttnbr + K_vocab) -> (T_train, 1, N_ttnbr + K_vocab) -> (T_train, N_ttnbr + K_vocab)
         
-        if use_eu_norm == True:
-            eu_cro_nrm = (torch.norm(sta_emb[:, None, :], dim=-1, keepdim=True) @ torch.norm(voc_emb, dim=-1, keepdim=True).transpose(-1, -2)).squeeze()  
-            ### (T_train, 1, 1) @ (T_train, 1, K_vocab) -> (T_train, 1, K_vocab) -> (T_train, K_vocab)
-        else:
-            eu_cro_nrm = torch.ones((T_train, K_vocab), device=device) * 20.
+        # if use_eu_norm == True:
+        #     eu_nrm = (torch.norm(sta_emb[:, None, :], dim=-1, keepdim=True) @ torch.norm(pos_emb, dim=-1, keepdim=True).transpose(-1, -2)).squeeze()  
+        #     ### (T_train, 1, 1) @ (T_train, 1, N_ttnbr + K_vocab) -> (T_train, 1, N_ttnbr + K_vocab) -> (T_train, N_ttnbr + K_vocab)
+        # else:
+        #     eu_nrm = torch.ones((T_train, N_ttnbr + K_vocab), device=device) * 20.
         
 
         ### step 2: 计算 CT 空间的相似度
-        pos_loc         = torch.cat([nei_loc, voc_loc], dim=1)
-                                                 # (T_train, N_ttnbr + N_tvnbr + K_vocab,      dim_ct)
         cos_sta_pos     = self.cos_similarity(
             sta_loc[:, None, :],    pos_loc[:, :, :]      
-        )                                        # (T_train, N_ttnbr + N_tvnbr + K_vocab,      dim_ct)
+        )                                        # (T_train, N_ttnbr + K_vocab,      dim_ct)
         cos_sta_pos_sum = cos_sta_pos.sum(dim=-1) 
-                                                 # (T_train, N_ttnbr + N_tvnbr + K_vocab             )
+                                                 # (T_train, N_ttnbr + K_vocab             )
         # cos_cnc_pos     = self.cos_similarity(
         #     cnc_loc[:, None, :, :], pos_loc[:, :, None,:]
         # )                                        # (T_train, N_trnbr + K_vocab, N_C, dim_ct)
         # ct_val          = (
         #     cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
-        # ) / self.tp          
-
+        # ) / self.tp * eu_nrm[:, :, None, None]         
+        
         ct_val = ct_val_triton(
             cnc_loc.to(torch.int32).contiguous(),
             pos_loc.to(torch.int32).contiguous(),
-            torch.ones((T_train, N_ttnbr + N_tvnbr + K_vocab), device=device, dtype=torch.float32).contiguous(),
+            torch.ones((T_train, N_ttnbr + K_vocab), device=device, dtype=torch.float32).contiguous(),
             cos_sta_pos.contiguous(),
             cos_sta_pos_sum.contiguous(),
             tp=float(self.tp),
@@ -204,32 +202,39 @@ class CritiGraph(torch.nn.Module):
             BLOCK_CD=32,
             NUM_WARPS=8,
             NUM_STAGES=2,
-        )
+        ) * 20. * temperature
         
         
-        # (T_train, N_ttnbr + N_tvnbr + K_vocab, N_C, dim_ct)
+        # (T_train, N_ttnbr + K_vocab, N_C, dim_ct)
         ## 对于 T 个 starting point，向 S_tot 个 positive sample 连边。此时，我们把其中某个 positive sample 替换为 connected sample，共有 C 个；此时，D 个维度上的的距离是多少？
 
         ### step 3: 计算 loss
-        ### step 3.1: 计算 cosine-similarity loss
-        loss_cos   = ct_val[:, 0:(N_ttnbr + N_tvnbr)]                 # (T_train, N_ttnbr + N_tvnbr, N_C, dim_ct)
-        eu_cos_val = eu_cos_val[..., None, None]                      # (T_train, N_ttnbr + N_tvnbr, N_C, dim_ct)
-        loss_cos.sub_(eu_cos_val)                                     # (T_train, N_ttnbr + N_tvnbr, N_C, dim_ct)
-        loss_cos.pow_(2)                                              # (T_train, N_ttnbr + N_tvnbr, N_C, dim_ct)
-        loss_cos.mul_(torch.abs(eu_cos_val))                          # 让更相似的点权重大一些
-        loss_cos.mul_(mask[..., None, None])                          # (T_train, N_ttnbr + N_tvnbr, N_C, dim_ct)
-        # loss_cos   = (
-        #     loss_cos[:, :N_ttnbr, :, :].sum(dim=1) / (mask[:, :N_ttnbr, None, None].sum(dim=1) + 1e-12) +         
-        #     loss_cos[:, N_ttnbr:, :, :].sum(dim=1) / (mask[:, N_ttnbr:, None, None].sum(dim=1) + 1e-12)
-        # ) / 2.0
-        loss_cos   = loss_cos.sum(dim=1) / (mask[..., None, None].sum(dim=1) + 1e-12)
-                                                                      # (T_train, N_C, dim_ct)
-    
-        ### step 3.2: 计算 cross-entropy loss
-        logits_cro = ct_val[:, (N_ttnbr + N_tvnbr):] * eu_cro_nrm[..., None, None] # (T_train, K_vocab, N_C, dim_ct)
-        loss_cro   = sampled_softmax_ce_uniform(logits_cro)                        # (T_train, N_C, dim_ct)
-        
-        return loss_cos, loss_cro
+        ### step 3.1: 计算 dyn-dyn cross-entropy loss
+        logits_ct_dyn    = ct_val[:, 0:N_ttnbr]                 # (T_train, N_ttnbr, N_C, dim_ct)
+        logits_eu_dyn    = eu_val[:, 0:N_ttnbr]                 # (T_train, N_ttnbr)
+        loss_dyn_dyn     = (
+            F.softmax(logits_eu_dyn, dim=1)[..., None, None] * (
+                F.log_softmax(logits_eu_dyn, dim=1)[..., None, None] - 
+                F.log_softmax(logits_ct_dyn, dim=1)
+            )
+        ).sum(dim=1)                                            # (T_train, N_C, dim_ct)  
+                                                             
+
+        ### step 3.2: 计算 dyn-sta cross-entropy loss
+        logits_ct_sta    = ct_val[:, N_ttnbr:] / temperature                 # (T_train, K_vocab, N_C, dim_ct)
+        # 使用 F.log_softmax 和 cur_tar 计算交叉熵
+        # logits_ct_sta: (T_train, K_vocab, N_C, dim_ct)
+        # cur_tar: (T_train,)
+        # 目标是对每个样本，取 cur_tar 作为 target，计算 cross entropy
+        # 先将 logits_ct_sta 变为 (T_train, K_vocab, N_C*dim_ct)，再对 K_vocab 做 softmax
+        logits_flat = logits_ct_sta.reshape(T_train, K_vocab, -1)  # (T_train, K_vocab, N_C*dim_ct)
+        log_probs = F.log_softmax(logits_flat, dim=1)              # (T_train, K_vocab, N_C*dim_ct)
+        # cur_tar 作为 target，gather
+        cur_tar_exp = cur_tar.view(-1, 1, 1).expand(-1, 1, N_C*self.tp)  # (T_train, 1, N_C*dim_ct)
+        target_log_probs = torch.gather(log_probs, 1, cur_tar_exp).squeeze(1)  # (T_train, N_C*dim_ct)
+        loss_dyn_sta = -target_log_probs.reshape(T_train, N_C, self.tp)  # (T_train, N_C, dim_ct)
+
+        return loss_dyn_dyn, loss_dyn_sta
     
     '''     
     def loom_vocab_cro(
@@ -296,34 +301,31 @@ class CritiGraph(torch.nn.Module):
         cnc_loc: torch.Tensor,   # (T_vocab, N_C    , dim_ct)
         
         sta_loc: torch.Tensor,   # (T_vocab, dim_ct)
-        vtn_loc: torch.Tensor,   # (T_vocab, N_vtnbr, dim_ct)
-        vvn_loc: torch.Tensor,   # (T_vocab, N_vvnbr, dim_ct)
+        pos_loc: torch.Tensor,   # (T_vocab, N_vvnbr, dim_ct)
 
         sta_emb: torch.Tensor,   # (T_vocab, dim_eu)
-        vtn_emb: torch.Tensor,   # (T_vocab, N_vtnbr, dim_eu)
-        vvn_emb: torch.Tensor,   # (T_vocab, N_vvnbr, dim_eu)
+        pos_emb: torch.Tensor,   # (T_vocab, N_vvnbr, dim_eu)
         
         mask   : torch.Tensor,   # (T_vocab, N_vtnbr + N_vvnbr)
         sid    : int = 0,
     ) -> torch.Tensor:
         device = devices[sid]
-        pos_loc    = torch.cat([vtn_loc, vvn_loc], dim=1)  # (T_vocab, N_vtnbr + N_vvnbr, dim_ct)
-        pos_emb    = torch.cat([vtn_emb, vvn_emb], dim=1)  # (T_vocab, N_vtnbr + N_vvnbr, dim_eu)
         
         ### step 1: 计算欧氏空间的相似度
-        eu_cos_val = (F.normalize(sta_emb[:, None, :], dim=-1) @ F.normalize(pos_emb, dim=-1).transpose(-1, -2)).squeeze()  
-            ### (T_vocab, 1, dim_eu) @ (T_vocab, dim_eu, N_vtnbr + N_vvnbr) -> (T_vocab, 1, N_vtnbr + N_vvnbr) -> (T_vocab, N_vtnbr + N_vvnbr)
-        
+        eu_val = 20. *  temperature * (sta_emb[:, None, :] @ pos_emb.transpose(-1, -2)).squeeze()  
+            ### (T_vocab, 1, dim_eu) @ (T_vocab, dim_eu, N_vvnbr) -> (T_vocab, 1,  N_vvnbr) -> (T_vocab, N_vvnbr)
+        # eu_nrm = (torch.norm(sta_emb[:, None, :], dim=-1, keepdim=True) @ torch.norm(pos_emb, dim=-1, keepdim=True).transpose(-1, -2)).squeeze() 
+            ### (T_vocab, 1, 1) @ (T_vocab, 1, N_vvnbr) -> (T_vocab, 1,  N_vvnbr) -> (T_vocab, N_vvnbr)
 
         ### step 2: 计算 CT 空间的相似度
         cos_sta_pos     = self.cos_similarity(
             sta_loc[:, None, :],    pos_loc[:, :, :]      
-        )                                        # (T_vocab, N_vtnbr + N_vvnbr,      dim_ct)
+        )                                        # (T_vocab, N_vvnbr,      dim_ct)
         cos_sta_pos_sum = cos_sta_pos.sum(dim=-1) 
-                                                 # (T_vocab, N_vtnbr + N_vvnbr             )
+                                                 # (T_vocab, NN_vvnbr             )
         # cos_cnc_pos     = self.cos_similarity(
         #     cnc_loc[:, None, :, :], pos_loc[:, :, None,:]
-        # )                                        # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
+        # )                                        # (T_vocab, N_vvnbr, N_C, dim_ct)
         # ct_val          = (
         #     cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
         # ) / self.tp          
@@ -331,7 +333,7 @@ class CritiGraph(torch.nn.Module):
         ct_val = ct_val_triton(
             cnc_loc.to(torch.int32).contiguous(),
             pos_loc.to(torch.int32).contiguous(),
-            torch.ones((T_vocab, N_vtnbr + N_vvnbr), device=device, dtype=torch.float32).contiguous(),
+            torch.ones((T_vocab, N_vvnbr), device=device, dtype=torch.float32).contiguous(),
             cos_sta_pos.contiguous(),
             cos_sta_pos_sum.contiguous(),
             tp=float(self.tp),
@@ -341,26 +343,21 @@ class CritiGraph(torch.nn.Module):
             BLOCK_CD=32,
             NUM_WARPS=8,
             NUM_STAGES=2,
-        )
-        # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
+        ) * 20. * temperature
+        # (T_vocab, N_vvnbr, N_C, dim_ct)
 
 
-        ### step 3: 计算 loss
-        ### step 3.1: 计算 cosine-similarity loss
-        loss_cos   = ct_val                                           # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
-        eu_cos_val = eu_cos_val[..., None, None]                      # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
-        loss_cos.sub_(eu_cos_val)                                     # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
-        loss_cos.pow_(2)                                              # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
-        loss_cos.mul_(torch.abs(eu_cos_val))                          # 让更相似的点权重大一些
-        loss_cos.mul_(mask[..., None, None])                          # (T_vocab, N_vtnbr + N_vvnbr, N_C, dim_ct)
-        # loss_cos   = (
-        #     loss_cos[:, :N_vtnbr, :, :].sum(dim=1) / (mask[:, :N_vtnbr, None, None].sum(dim=1) + 1e-12) +         
-        #     loss_cos[:, N_vtnbr:, :, :].sum(dim=1) / (mask[:, N_vtnbr:, None, None].sum(dim=1) + 1e-12)
-        # ) / 2.0
-        loss_cos   = loss_cos.sum(dim=1) / (mask[..., None, None].sum(dim=1) + 1e-12)
-                                                                      # (T_vocab, N_C, dim_ct)
+        ### step 3: 计算 dyn-dyn cross-entropy loss
+        logits_ct_dyn    = ct_val                 # (T_vocab, N_vvnbr, N_C, dim_ct)
+        logits_eu_dyn    = eu_val                 # (T_vocab, N_vvnbr)
+        loss_dyn_dyn     = (
+            F.softmax(logits_eu_dyn, dim=1)[..., None, None] * (
+                F.log_softmax(logits_eu_dyn, dim=1)[..., None, None] - 
+                F.log_softmax(logits_ct_dyn, dim=1)
+            )
+        ).sum(dim=1)                                       # (T_train, N_C, dim_ct)  
     
-        return loss_cos
+        return loss_dyn_dyn
     
     
     def loom_valid(
@@ -380,9 +377,10 @@ class CritiGraph(torch.nn.Module):
         
         
         ### step 1: 计算欧氏空间的相似度
-        eu_cos_val = (F.normalize(sta_emb[:, None, :], dim=-1) @ F.normalize(pos_emb, dim=-1).transpose(-1, -2)).squeeze()  
+        eu_val = 20. * temperature * (sta_emb[:, None, :] @ pos_emb.transpose(-1, -2)).squeeze()  
             ### (T_valid, 1, dim_eu) @ (T_valid, dim_eu, N_vanbr) -> (T_valid, 1, N_vanbr) -> (T_valid, N_vanbr)
-        
+        # eu_nrm = (torch.norm(sta_emb[:, None, :], dim=-1, keepdim=True) @ torch.norm(pos_emb, dim=-1, keepdim=True).transpose(-1, -2)).squeeze()  
+            ### (T_valid, 1, 1) @ (T_valid, 1, N_vanbr) -> (T_valid, 1, N_vanbr) -> (T_valid, N_vanbr)
 
         ### step 2: 计算 CT 空间的相似度
         cos_sta_pos     = self.cos_similarity(
@@ -410,21 +408,21 @@ class CritiGraph(torch.nn.Module):
             BLOCK_CD=32,
             NUM_WARPS=8,
             NUM_STAGES=2,
-        )
-        # (T_valid, N_vanbr, N_C, dim_ct)
+        ) * 20. * temperature
+         # (T_valid, N_vanbr, N_C, dim_ct)
 
 
-        ### step 3: 计算 loss
-        ### step 3.1: 计算 cosine-similarity loss
-        loss_cos   = ct_val                                           # (T_valid, N_vabnr, N_C, dim_ct)
-        eu_cos_val = eu_cos_val[..., None, None]                      # (T_valid, N_vabnr, N_C, dim_ct)
-        loss_cos.sub_(eu_cos_val)                                     # (T_valid, N_vabnr, N_C, dim_ct)
-        loss_cos.pow_(2)                                              # (T_valid, N_vabnr, N_C, dim_ct)
-        loss_cos.mul_(torch.abs(eu_cos_val))                          # 让更相似的点权重大一些
-        loss_cos.mul_(mask[..., None, None])                          # (T_valid, N_vabnr, N_C, dim_ct)
-        loss_cos   = loss_cos.sum(dim=1) / (mask[..., None, None].sum(dim=1) + 1e-12)
-                                                                      # (T_valid, N_C, dim_ct)
-        return loss_cos
+        ### step 3: 计算 dyn-dyn cross-entropy loss
+        logits_ct_dyn    = ct_val                 # (T_valid, N_vanbr, N_C, dim_ct)
+        logits_eu_dyn    = eu_val                 # (T_valid, N_vanbr)
+        loss_dyn_dyn     = (
+            F.softmax(logits_eu_dyn, dim=1)[..., None, None] * (
+                F.log_softmax(logits_eu_dyn, dim=1)[..., None, None] - 
+                F.log_softmax(logits_ct_dyn, dim=1)
+            )
+        ).sum(dim=1)                                       # (T_valid, N_C, dim_ct)  
+    
+        return loss_dyn_dyn
     
     def train_train_blocks(self, sid: int):
         device = devices[sid]
@@ -437,17 +435,14 @@ class CritiGraph(torch.nn.Module):
             with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
                 _cur_tar = self.train_tar[train_slice]                      # (T_train, )
                 _ttn_idx = self.train_sampler.get_cos_connection(train_block, "train_train")   # (T_train, N_ttnbr)
-                _tvn_idx = self.train_sampler.get_cos_connection(train_block, "train_vocab")   # (T_train, N_tvnbr)
                 _voc_idx = self.train_sampler.get_cro_connection(_cur_tar)                     # (T_train, K_vocab)
 
                 _sta_loc = self.train_locations[train_slice]                # (T_train, dim_ct)
                 _ttn_loc = self.train_locations[_ttn_idx]                   # (T_train, N_ttnbr, dim_ct)
-                _tvn_loc = self.vocab_locations[_tvn_idx]                   # (T_train, N_tvnbr, dim_ct)
                 _voc_loc = self.vocab_locations[_voc_idx]                   # (T_train, K_vocab, dim_ct)
 
                 _sta_emb = self.train_emb[train_slice]                      # (T_train, dim_eu)
                 _ttn_emb = self.train_emb[_ttn_idx]                         # (T_train, N_ttnbr, dim_eu)
-                _tvn_emb = self.train_emb[_tvn_idx]                         # (T_train, N_tvnbr, dim_eu)
                 _voc_emb = self.train_emb[_voc_idx]                         # (T_train, K_vocab, dim_eu)
                 
                 data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
@@ -457,29 +452,29 @@ class CritiGraph(torch.nn.Module):
             with torch.cuda.device(device), torch.cuda.stream(defa_streams[sid]):
                 defa_streams[sid].wait_event(data_ready_event)
                 
-                sta_loc, ttn_loc, tvn_loc, voc_loc, sta_emb, ttn_emb, tvn_emb, voc_emb = (
+                cur_tar, sta_loc, ttn_loc, voc_loc, sta_emb, ttn_emb, voc_emb = (
+                    _cur_tar.to(device, non_blocking=True),
                     _sta_loc.to(device, non_blocking=True),
                     _ttn_loc.to(device, non_blocking=True),
-                    _tvn_loc.to(device, non_blocking=True),
                     _voc_loc.to(device, non_blocking=True),
                     _sta_emb.to(device, non_blocking=True),
                     _ttn_emb.to(device, non_blocking=True),
-                    _tvn_emb.to(device, non_blocking=True),
                     _voc_emb.to(device, non_blocking=True),
                 )
                 
                 cnc_loc   = self.connection(sta_loc, dev_num=sid)
-                mask      = self.converge_mask(T_train, N_ttnbr + N_tvnbr, sid)
+                mask      = self.converge_mask(T_train, N_ttnbr, sid)
 
-                loss_cos, loss_cro = self.loom_train(
+                loss_dyn_dyn, loss_dyn_sta = self.loom_train(
+                    cur_tar,
                     cnc_loc,
-                    sta_loc, ttn_loc, tvn_loc, voc_loc,
-                    sta_emb, ttn_emb, tvn_emb, voc_emb,
+                    sta_loc, ttn_loc, voc_loc,
+                    sta_emb, ttn_emb, voc_emb,
                     mask, sid
                 )
                 
-                loss_tot = loss_strategy['train_ratio_cos'] * loss_cos + loss_strategy['train_ratio_cro'] * loss_cro
-                selected_locs, loss_cos_T, loss_cro_T, loss_tot_T  = self.get_best_loc(cnc_loc, loss_cos, loss_cro, loss_tot, sid) # (T_train, ) * 3, (T_train, dim_ct)
+                loss_tot = loss_strategy['train_ratio_cos'] * loss_dyn_dyn + loss_strategy['train_ratio_cro'] * loss_dyn_sta
+                selected_locs, loss_cos_T, loss_cro_T, loss_tot_T  = self.get_best_loc(cnc_loc, loss_dyn_dyn, loss_dyn_sta, loss_tot, sid) # (T_train, ) * 3, (T_train, dim_ct)
                 
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
                 comp_ready_event.record(defa_streams[sid])
@@ -501,15 +496,12 @@ class CritiGraph(torch.nn.Module):
             
             ### step.1 准备数据
             with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _vtn_idx = self.vocab_sampler.get_cos_connection(vocab_block, "vocab_train")   # (T_vocab, N_vtnbr)
                 _vvn_idx = self.vocab_sampler.get_cos_connection(vocab_block, "vocab_vocab")   # (T_vocab, N_vvnbr)
 
                 _sta_loc = self.vocab_locations[vocab_slice]                 # (T_vocab, dim_ct)
-                _vtn_loc = self.train_locations[_vtn_idx]                    # (T_vocab, N_vtnbr, dim_ct)
                 _vvn_loc = self.vocab_locations[_vvn_idx]                    # (T_vocab, N_vvnbr, dim_ct)
 
                 _sta_emb = self.vocab_emb[vocab_slice]                       # (T_vocab, dim_eu)
-                _vtn_emb = self.train_emb[_vtn_idx]                          # (T_vocab, N_vtnbr, dim_eu)
                 _vvn_emb = self.vocab_emb[_vvn_idx]                          # (T_vocab, N_vvnbr, dim_eu)
                 
                 data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
@@ -519,22 +511,20 @@ class CritiGraph(torch.nn.Module):
             with torch.cuda.device(device), torch.cuda.stream(defa_streams[sid]):
                 defa_streams[sid].wait_event(data_ready_event)
                 
-                sta_loc, vtn_loc, vvn_loc, sta_emb, vtn_emb, vvn_emb = (
+                sta_loc, vvn_loc, sta_emb, vvn_emb = (
                     _sta_loc.to(device, non_blocking=True),
-                    _vtn_loc.to(device, non_blocking=True),
                     _vvn_loc.to(device, non_blocking=True),
                     _sta_emb.to(device, non_blocking=True),
-                    _vtn_emb.to(device, non_blocking=True),
                     _vvn_emb.to(device, non_blocking=True),
                 )
                 
                 cnc_loc   = self.connection(sta_loc, dev_num=sid)
-                mask      = self.converge_mask(T_vocab, N_vtnbr + N_vvnbr, sid)
+                mask      = self.converge_mask(T_vocab,  N_vvnbr, sid)
 
                 loss_cos  = self.loom_vocab(
                     cnc_loc,
-                    sta_loc, vtn_loc, vvn_loc,
-                    sta_emb, vtn_emb, vvn_emb,
+                    sta_loc, vvn_loc,
+                    sta_emb, vvn_emb,
                     mask, sid
                 )
                 
@@ -921,15 +911,16 @@ class CritiGraph(torch.nn.Module):
             
             S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
             S_tt_ct      = self.cos_similarity(train_ct_emb[:, None, :], train_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
-            visualize_similarity(S_tt_eu, S_tt_ct, meta_name="{}" + "train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            visualize_similarity(S_tt_eu, S_tt_ct, meta_name="{}" + "by_eu_train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            visualize_similarity(S_tt_ct, S_tt_ct, meta_name="{}" + "by_ct_train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
             
-            S_vv_eu      = normalized_matmul(vocab_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
-            S_vv_ct      = self.cos_similarity(vocab_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
-            visualize_similarity(S_vv_eu, S_vv_ct, meta_name="{}" + "vocab_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            # S_vv_eu      = normalized_matmul(vocab_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            # S_vv_ct      = self.cos_similarity(vocab_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            # visualize_similarity(S_vv_eu, S_vv_ct, meta_name="{}" + "vocab_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
             
-            S_tv_eu      = normalized_matmul(train_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
-            S_tv_ct      = self.cos_similarity(train_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
-            visualize_pair_bihclust(S_tv_eu, S_tv_ct, meta_name="{}" + "train_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            # S_tv_eu      = normalized_matmul(train_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            # S_tv_ct      = self.cos_similarity(train_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            # visualize_pair_bihclust(S_tv_eu, S_tv_ct, meta_name="{}" + "train_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
             
             
 

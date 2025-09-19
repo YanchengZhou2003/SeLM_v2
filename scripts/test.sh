@@ -1,11 +1,27 @@
-python -m src.gpt  \
-    --N_train 8192 --T_train 128 --N_ttnbr 1024 --N_tvnbr 32 --K_vocab 128 \
-    --N_vocab 8192 --T_vocab 128 --N_vtnbr 32  --N_vvnbr 1024  \
-    --N_valid 8192 --T_valid 128  --N_vanbr 1024 \
-    --h 25 --tp 1 --cur_tp 1 --cur_portion 0.5 --division_fact 1.0 \
-    --train_epoch_num 150 --valid_epoch_num 150 --train_ratio_cos 0.99 --train_ratio_cro 0.01 \
-    --train_converge 20 --valid_converge 20 \
-    --train_graph_reset 10 --vocab_graph_reset 10 --valid_graph_reset 10 \
-    --train_only 0 --valid_only 0 \
-    --val_interval 10 --vis_interval 10 \
-    --use_eu_norm 0 --vis_path ./vis_new/tmp/
+h=8
+N=512
+cnt=0
+for N in 2048; do
+    for train_ratio_cos in 0.60 0.70 0.80; do
+        cnt=$((cnt + 1))
+        train_ratio_cro=$(echo "1.0 - $train_ratio_cos" | bc)
+        python -m src.gpt  \
+            --N_train $N --T_train 64 --N_ttnbr $N --K_vocab 65 \
+            --N_vocab 65   --T_vocab 65  --N_vvnbr 65   \
+            --N_valid 512 --T_valid 64 --N_vanbr $N \
+            --h $h --tp 4 --cur_tp 2 --cur_portion 1.0 --division_fact 1.0 \
+            --train_epoch_num 150 --valid_epoch_num 150 --train_ratio_cos $train_ratio_cos --train_ratio_cro $train_ratio_cro \
+            --train_converge 0 --valid_converge 0 \
+            --train_graph_reset 25 --vocab_graph_reset 25 --valid_graph_reset 25 \
+            --train_only 0 --valid_only 0 \
+            --val_interval 10 --vis_interval 50 \
+            --use_eu_norm 0 --temperature 0.1 \
+            --vis_path ./vis_new/h${h}_N${N}_train_ratio_cos${train_ratio_cos}_cro${train_ratio_cro}/ \
+            > log_new/h${h}_N${N}_train_ratio_cos${train_ratio_cos}_cro${train_ratio_cro}.log 2>&1 &
+        # if [ $((cnt % 4)) -eq 0 ]; then
+        #     wait
+        # fi
+    done
+done
+
+# 0.27

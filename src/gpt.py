@@ -22,22 +22,42 @@ from src.cte import *
 from src.para import *
 from src.utils import *
 from src.vis import *
-from src.tokenizer import MultilingualBPETokenizer
+# from src.tokenizer import MultilingualBPETokenizer
 
-tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
-tokenizer.load("./tokenizer")   # 已经训练好并保存过
+# tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
+# tokenizer.load("./tokenizer")   # 已经训练好并保存过
 
-# ====== 数据加载 ======
-# 注意：这里 text 是完整语料字符串
+## ====== 数据加载 ======
+## 注意：这里 text 是完整语料字符串
+# with open('./data/input.txt', 'r', encoding='utf-8') as f:
+#     text = f.read()
+# data_ids = tokenizer.encoding(text)              # 列表[int]
+# data = torch.tensor(data_ids, dtype=torch.long, pin_memory=True)
+
+# text_size = len(data)
+# n = int(0.9 * text_size)
+# train_data = data[:n]
+# val_data = data[n:]
+
 with open('./data/input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
-data_ids = tokenizer.encoding(text)              # 列表[int]
-data = torch.tensor(data_ids, dtype=torch.long, pin_memory=True)
 
+chars = sorted(list(set(text)))
+vocab_size = len(chars)    
+
+# create a mapping from characters to integers
+stoi = { ch:i for i,ch in enumerate(chars) }
+itos = { i:ch for i,ch in enumerate(chars) }
+encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
+decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
+
+# Train and test splits
+data = torch.tensor(encode(text), dtype=torch.long, pin_memory=True)
 text_size = len(data)
-n = int(0.9 * text_size)
+# datai = torch.tensor([i * block_size for i in range(text_size)], dtype=torch.long)
+n = int(0.9*text_size) # first 90% will be train, rest val
 train_data = data[:n]
-val_data = data[n:]
+val_data   = data[n:]
 
 
 # data loading
@@ -368,16 +388,16 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
 
 
 if __name__ == "__main__":
-    gpt_ckpt = f"normed_b{block_size}_" + "iters_{}.pth".format(1000)
+    gpt_ckpt = f"65_normed_b{block_size}_" + "iters_{}.pth" # .format(2999)
+    # train_gpt(gpt_ckpt)
+    # for iters in [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 3999]:
+    #     eval_gpt(gpt_ckpt.format(iters))
     # cte_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}.pth"
     # cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache_fixed256.pth"
-    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_new_cache_onlylast_onlygood.pth"
-
-
-    # train_gpt(gpt_ckpt)
-    # for iters in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 9999]:
-    #     eval_gpt(gpt_ckpt.format(iters))
     
+    
+    gpt_ckpt = gpt_ckpt.format(3999)
+    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_new_cache_onlylast_onlygood.pth"
     # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
     
     train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)

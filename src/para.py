@@ -25,12 +25,12 @@ parser.add_argument("--cte_eval_iters"    , type=int,   default=1,     help="")
 parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
 parser.add_argument("--T_train"           , type=int,   default=128,   help="")
 parser.add_argument("--N_ttnbr"           , type=int,   default=256,   help="")
-parser.add_argument("--N_tvnbr"           , type=int,   default=256,   help="")
+parser.add_argument("--N_tvnbr"           , type=int,   default=100000000,   help="")
 parser.add_argument("--K_vocab"           , type=int,   default=256,   help="")
 
-parser.add_argument("--N_vocab"           , type=int,   default=8192 , help="")
+parser.add_argument("--N_vocab"           , type=int,   default=65   , help="")
 parser.add_argument("--T_vocab"           , type=int,   default=128,   help="")
-parser.add_argument("--N_vtnbr"           , type=int,   default=256,   help="")
+parser.add_argument("--N_vtnbr"           , type=int,   default=100000000,   help="")
 parser.add_argument("--N_vvnbr"           , type=int,   default=256,   help="")
 
 parser.add_argument("--N_valid"           , type=int,   default=2048,  help="")
@@ -49,6 +49,8 @@ parser.add_argument("--valid_epoch_num"   , type=int,   default=500,   help="")
 parser.add_argument("--train_ratio_cos"   , type=float, default=0.99,  help="") 
 parser.add_argument("--train_ratio_cro"   , type=float, default=0.01,  help="")
 
+parser.add_argument("--temperature"       , type=float, default=0.1 , help="")
+
 parser.add_argument("--train_converge"    , type=int,   default=50 ,   help="")
 parser.add_argument("--valid_converge"    , type=int,   default=50 ,   help="")
 
@@ -62,7 +64,7 @@ parser.add_argument("--valid_only"        , type=int,   default=0 ,    help="")
 parser.add_argument("--val_interval"      , type=int,   default=10 ,   help="")
 parser.add_argument("--vis_interval"      , type=int,   default=100 ,  help="")
 
-parser.add_argument("--vis_path"          , type=str,   default='./vis2/tmp' , help="")
+parser.add_argument("--vis_path"          , type=str,   default='./vis_new/_tmp' , help="")
 parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
 
 args = parser.parse_args()
@@ -77,9 +79,9 @@ args = parser.parse_args()
 # 超参数：GPT
 batch_size        = 64    
 block_size        = 256
-max_iters         = 10000
+max_iters         = 4000
 val_max_iters     = 1000
-gpt_save_interval = 1000
+gpt_save_interval = 500
 learning_rate     = 3e-4
 device            = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 eval_iters        = 10
@@ -154,6 +156,8 @@ loss_strategy: Dict = {
 train_epoch_num = args.train_epoch_num # 5
 valid_epoch_num = args.valid_epoch_num # 5
 
+temperature     = args.temperature       # 0.01
+
 train_graph_reset = args.train_graph_reset # 50
 vocab_graph_reset = args.vocab_graph_reset # 50
 valid_graph_reset = args.valid_graph_reset # 50
@@ -220,8 +224,8 @@ cte_path         = './ckpt/cte'
 cache_path       = './data/'
 train_cache_path = './ckpt/cte'
 vis_path         = args.vis_path
-train_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}.pt"
-valid_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}_N_valid{N_valid}_valid_epoch{valid_epoch_num}.pt"
+train_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}_train_ratio_cos{args.train_ratio_cos}_cro{args.train_ratio_cro}.pt"
+valid_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}_train_ratio_cos{args.train_ratio_cos}_cro{args.train_ratio_cro}_N_valid{N_valid}_valid_epoch{valid_epoch_num}.pt"
 
 os.makedirs(vis_path, exist_ok=True)
 
