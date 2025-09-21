@@ -426,6 +426,9 @@ class CritiGraph(torch.nn.Module):
                 for i, block in enumerate(self.splits)
         ]
         
+        self.match_eu()
+        exit(0)
+        
         self.sampler    = Expander_Sampler(
             self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.N_T,
             train_splits, valid_splits,
@@ -461,8 +464,7 @@ class CritiGraph(torch.nn.Module):
         mark(ED, "all_preparation_2", father="all_preparation")
         
         
-        # self.match_eu()
-        # exit(0)
+
         
         ### step 3: 开启多线程
         mark(ST, "all_preparation_3")
@@ -768,7 +770,71 @@ class CritiGraph(torch.nn.Module):
             
             np.savez_compressed(f"./analysis/EU_N_train_{self.N_train}_N_valid_{self.N_valid}_losses.npz", **result)
     '''
+    def match_eu(self):
+            topk_losses = []
+            real_losses = []
+            targets     = []
+            
+            for i, block in enumerate(self.splits):
+                if block[0] < self.N_train:
+                    continue
+                cur_type   = get_type(block, self.N_train, self.N_valid) # 一定是 valid
+                valid_emb  = self.sampler.emb[block[0]:block[1]]  # (T, dim)
+                vocab_emb  = self.sampler.emb[self.sta_slice]     # (V, D)
+                cur_tar    = self.tar_splits[i].to(main_device)      # (T, )
+                targets.append(cur_tar.cpu())
+                all_val    = []
+                
+                ### 遍历所有训练过的 token
+                for j, train_block in enumerate(self.splits):
+                    if train_block[0] >= self.N_train:
+                        break
+                    if train_block[1] > self.N_dyn:
+                        train_block = (train_block[0], self.N_dyn)
+                        
+                    train_emb = self.sampler.emb[train_block[0]:train_block[1]]     
+                    topk_eu_val = valid_emb @ train_emb.transpose(-1, -2)  # (T, N_dyn)
+                    all_val.append(topk_eu_val)         
+                
+                all_val = torch.cat(all_val, dim=1) # (T, N_dyn)
+                
+                ### 找到前 256 个最接近的
+                topk_indices = all_val.topk(256, dim=-1).indices # (T, 256)
+                
+                ### 把它们的 locations 拿出来
+                topk_emb     = self.sampler.emb[topk_indices.view(-1)].view(topk_indices.size(0), topk_indices.size(1), -1) # (T, 256, D)
+                
+                ### 获取它们与静态 embedding 的距离（其实也就是 CT Space 的 logits，然后得到 loss)
+                topk_eu_val  = 20. * topk_emb @ vocab_emb.transpose(-1, -2)  # (T, 256, V)
+                topk_loss    = F.cross_entropy(topk_eu_val.view(self.N_T * 256, -1), cur_tar[:, None].expand(-1, 256).reshape(-1), reduction='none').reshape(self.N_T, 256) # (T, 256)
+                
+                topk_losses.append(topk_loss.cpu())
+                
+                ### 自己原本 locations 的 loss 也要算
+                real_eu_val = 20. * valid_emb @ vocab_emb.transpose(-1, -2)  # (T, V)
+                real_loss   = F.cross_entropy(real_eu_val, cur_tar, reduction='none')
 
+                real_losses.append(real_loss.cpu()) # (T, )
+            
+            topk_losses = torch.cat(topk_losses, dim=0).numpy() # (N_valid, 256)
+            real_losses = torch.cat(real_losses, dim=0).numpy() # (N_valid, )
+            
+            assert topk_losses.shape[0] == real_losses.shape[0] == self.N_valid
+            
+            topk_label = topk_eu_val.argmax(dim=-1).cpu()  # (T, 256)
+            real_label = real_eu_val.argmax(dim=-1).cpu()  # (T,)
+            targets    = torch.cat(targets, dim=0).numpy() # (N_valid,)
+
+            # 保存
+            result = {
+                "real_losses": real_losses,
+                "topk_losses": topk_losses,
+                "real_label": real_label.numpy(),
+                "topk_label": topk_label.numpy(),
+                "ground_truth_label": targets
+            }
+            
+            np.savez_compressed(f"./analysis/EU_N_train_{self.N_train}_N_valid_{self.N_valid}_losses.npz", **result)
     def validate(self, epoch):
         loss     = {"train": 0., "valid": 0.}
         accuracy = {"train": 0., "valid": 0.}
