@@ -4,6 +4,7 @@ import random
 import warnings
 from datetime import datetime
 
+import matplotlib.ticker as ticker
 import torch
 import torch.nn as nn
 from rotary_embedding_torch import RotaryEmbedding
@@ -22,6 +23,7 @@ from src.cte import *
 from src.para import *
 from src.utils import *
 from src.vis import *
+
 # from src.tokenizer import MultilingualBPETokenizer
 
 # tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
@@ -72,7 +74,7 @@ def get_batch(split, bs=None, ix=None, to_cuda=False) -> Tuple[torch.Tensor, tor
     y = torch.stack([data[i+1 : i+block_size+1] for i in ix])
     
     if to_cuda:
-        x, y, ix = x.to(device), y.to(device), ix.to(device),
+        x, y, ix = x.to(main_device), y.to(main_device), ix.to(main_device),
     return x, y, ix
 
 
@@ -182,13 +184,20 @@ class GPTLanguageModel(nn.Module):
         x = self.blocks(x) # (B,T,E)
         x: torch.Tensor = self.ln_f(x) # (B,T,E)
         token_embeddings = self.token_embedding_table.weight  # (V, E)
-        logits_eu = 20. * torch.matmul(F.normalize(x, dim=-1), F.normalize(token_embeddings, dim=-1).t()) # (B, T, V)
+        if use_eu_norm:
+            # print("Using euclidean norm for logits calculation")
+            logits_eu = torch.matmul(x, token_embeddings.t()) # (B, T, V)
+        else:
+            logits_eu = 20. * torch.matmul(F.normalize(x, dim=-1), F.normalize(token_embeddings, dim=-1).t()) # (B, T, V)
         
         if return_dyn_loss:
-            dyn_emb = F.normalize(x, dim=-1)  # (B, T, E)
+            if use_eu_norm:
+                dyn_emb = x  # (B, T, E)
+            else:
+                dyn_emb = F.normalize(x, dim=-1)  # (B, T, E)
             loss    = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T), reduction='none') # (B * T,)
             acc     = (logits_eu.argmax(dim=-1) == targets)                                            # (B, T)
-            return loss.view(B, T), dyn_emb, acc
+            return loss.view(B, T), dyn_emb, acc, logits_eu
 
         loss_eu = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T))
         return loss_eu
@@ -197,10 +206,64 @@ class GPTLanguageModel(nn.Module):
 
 
 ################ ------------- GPT 训练与评估 ------------- ################
+def get_norm_distribution(model: GPTLanguageModel, iter: int):
+    import matplotlib.ticker as ticker
+    all_norms = []
+    all_logits = []
+    model.eval()
+    for _ in tqdm(range(100)):
+        xb, yb, _ = get_batch('train', to_cuda=True)
+        loss, dyn_emb, acc, logits = model(xb, targets=yb, return_dyn_loss=True)  # (B, T), (B, T, E), scalar, (B, T, V)
+
+        # 计算 dyn_emb 的 L2 norm
+        norms = torch.norm(dyn_emb, dim=-1)   # (B, T)
+        all_norms.append(norms.detach().cpu())
+
+        # 收集 logits
+        all_logits.append(logits.detach().cpu())
+
+    # ===== dyn_emb norm 分布 =====
+    all_norms = torch.cat([n.reshape(-1) for n in all_norms], dim=0)
+    plt.figure(figsize=(6,4))
+    plt.hist(all_norms.numpy(), bins=50, density=True, alpha=0.7)
+    plt.xlabel("L2 Norm")
+    plt.ylabel("Density")
+    plt.title("Distribution of dyn_emb norms")
+    plt.grid(True)
+    plt.gca().xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:.3f}"))
+    plt.savefig(f"gpt_dyn_emb_norm_dist_iter_{iter}.png")
+
+    # ===== token embedding norm 分布 =====
+    token_emb = model.token_embedding_table.weight.detach().cpu()  # (V, E)
+    token_norms = torch.norm(token_emb, dim=-1)  # (V,)
+    plt.figure(figsize=(6,4))
+    plt.hist(token_norms.numpy(), bins=50, density=True, alpha=0.7, color="orange")
+    plt.xlabel("L2 Norm")
+    plt.ylabel("Density")
+    plt.title("Distribution of token embedding norms")
+    plt.grid(True)
+    plt.gca().xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:.3f}"))
+    plt.savefig(f"gpt_token_emb_norm_dist_iter_{iter}.png")
+
+    # ===== logits 分布 =====
+    all_logits = torch.cat([l.reshape(-1) for l in all_logits], dim=0)
+    plt.figure(figsize=(6,4))
+    plt.hist(all_logits.numpy(), bins=100, density=True, alpha=0.7, color="green")
+    plt.xlabel("Logit value")
+    plt.ylabel("Density")
+    plt.title("Distribution of logits")
+    plt.grid(True)
+    plt.gca().xaxis.set_major_formatter(ticker.FuncFormatter(lambda x, _: f"{x:.3f}"))
+    plt.savefig(f"gpt_logits_dist_iter_{iter}.png")
+
+    model.train()
+
+
 def train_gpt(gpt_ckpt: str):
-    model: GPTLanguageModel = GPTLanguageModel().to(device)
+    model: GPTLanguageModel = GPTLanguageModel().to(main_device)
+    get_norm_distribution(model, -1)
     # print the number of parameters in the model
-    print(sum(p.numel() for p in model.parameters())/1e6, 'M parameters')
+    print(sum(p.numel() for p in model.parameters()) / 1e6, 'M parameters')
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     running_loss = []
     for iter in range(max_iters):
@@ -212,7 +275,9 @@ def train_gpt(gpt_ckpt: str):
         loss.backward()
         optimizer.step()
 
+        
         if iter % gpt_save_interval == 0 or iter == max_iters - 1:
+            get_norm_distribution(model, iter)
             print(f"current iter: {iter}, avg loss in last {gpt_save_interval} iters: {sum(running_loss) / len(running_loss)}")
             running_loss = []
             torch.save(model.state_dict(), os.path.join(gpt_path, gpt_ckpt.format(iter)))
@@ -221,7 +286,7 @@ def eval_gpt(gpt_ckpt: str):
     model: GPTLanguageModel = GPTLanguageModel()
     model_cktp = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
     model.load_state_dict(model_cktp)
-    model = model.to(device)
+    model = model.to(main_device)
     model.eval()
     
     all_loss = []
@@ -232,6 +297,9 @@ def eval_gpt(gpt_ckpt: str):
     
     print(f"gpt eval loss: {sum(all_loss) / len(all_loss)}")
 
+
+
+
 ################ ------------- 从 GPT 到 CTE ------------- ################
 
 @torch.no_grad()
@@ -240,7 +308,7 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     model: GPTLanguageModel = GPTLanguageModel()
     model_cktp = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
     model.load_state_dict(model_cktp)
-    model = model.to(device)
+    model = model.to(main_device)
     model.eval()
     
     ### step 1: 准备基本数据
@@ -327,14 +395,20 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
 ################ ------------- 训练 CTE ------------- ################
 
 @torch.no_grad()
-def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int,):
+def train_cte(
+    train_cache_cktp: str, 
+    valid_cache_cktp: str,
+    gpt_ckpt: str, 
+    train_length: int, 
+    val_length: int,
+):
     ### step 1: 读取缓存，并 pin 在 cpu。根据计算，10 ** 7 时也仅占用 15 GB
     assert math.log2(train_length) % 1 == 0, "train_length 必须是 2 的整数次幂"
     assert math.log2(val_length) % 1 == 0, "val_length 必须是 2 的整数次幂"
     
     
-    train_cache = load_file(os.path.join(cache_path, cache_cktp.format(train_length, 'train')), device='cpu')
-    valid_cache = load_file(os.path.join(cache_path, cache_cktp.format(val_length, 'val')), device='cpu')
+    train_cache = load_file(os.path.join(cache_path, train_cache_cktp.format(train_length)), device='cpu')
+    valid_cache = load_file(os.path.join(cache_path, valid_cache_cktp.format(val_length, train_length)), device='cpu')
     train_cache, valid_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(valid_cache)
     
     ''' debug '''
@@ -348,8 +422,10 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     vocab_emb   = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
     train_emb   = train_cache['emb']                                               # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
+    train_top   = train_cache['rk']
     valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory
     valid_y     = valid_cache['y']                                                 # (N_valid, ),       pinned memory
+    valid_top   = valid_cache['rk']
     
     ### step 2: 初始化 GPT 和 CTE
     emb_size    = N_train + N_vocab + N_valid
@@ -375,11 +451,11 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
     #### step 3.2: CTE 训练与测试
     if not valid_only:
         cte.train_all(
-            train_emb, vocab_emb, train_y
+            train_emb, train_top, vocab_emb, train_y
         )
     if not train_only:
         cte.test_time_train_all(
-            train_emb, valid_emb, vocab_emb, valid_y,
+            train_emb, valid_emb, valid_top, vocab_emb, valid_y,
         )
 
 
@@ -389,6 +465,7 @@ def train_cte(cache_cktp: str, gpt_ckpt: str, train_length: int, val_length: int
 
 if __name__ == "__main__":
     gpt_ckpt = f"65_normed_b{block_size}_" + "iters_{}.pth" # .format(2999)
+    # gpt_ckpt = f"tmp_" + "iters_{}.pth" # .format(2999)
     # train_gpt(gpt_ckpt)
     # for iters in [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 3999]:
     #     eval_gpt(gpt_ckpt.format(iters))
@@ -397,10 +474,10 @@ if __name__ == "__main__":
     
     
     gpt_ckpt = gpt_ckpt.format(3999)
-    cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_new_cache_onlylast_onlygood_filtered.pth"
-    # get_cte_train_and_test(gpt_ckpt, cache_ckpt)
+    train_cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_train_new_cache_onlylast_onlygood_filtered.pth"
+    valid_cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_query_vs_train{}_filtered.pth"
     
-    train_cte(cache_ckpt, gpt_ckpt, N_train, N_valid)
+    train_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     
     
     # validate_cte(

@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 413, in <module>
+    train_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 343, in train_cte
+    valid_cache = load_file(os.path.join(cache_path, valid_cache_cktp.format(val_length)), device='cpu')
+IndexError: Replacement index 1 out of range for positional args tuple

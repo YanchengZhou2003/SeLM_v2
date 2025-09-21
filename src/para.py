@@ -7,13 +7,13 @@ import torch
 
 from src.utils import make_splits
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 main_device = torch.device('cuda:0')
-devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
+devices = [torch.device(f"cuda:{i}") for i in range(1, torch.cuda.device_count())]
 num_devices = len(devices)
 
-defa_streams = [torch.cuda.default_stream(i) for i in range(torch.cuda.device_count())]
-data_streams = [torch.cuda.Stream(0) for _ in range(torch.cuda.device_count())]
+defa_streams = [torch.cuda.default_stream(i) for i in range(1, torch.cuda.device_count())]
+data_streams = [torch.cuda.Stream(0) for _ in range(1, torch.cuda.device_count())]
 
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
 ### 1. GPT 训练相关参数
@@ -83,7 +83,6 @@ max_iters         = 4000
 val_max_iters     = 1000
 gpt_save_interval = 500
 learning_rate     = 3e-4
-device            = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 eval_iters        = 10
 n_embd            = 384
 n_head            = 6
@@ -225,6 +224,8 @@ cache_path       = './data/'
 train_cache_path = './ckpt/cte'
 vis_path         = args.vis_path
 train_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}_train_ratio_cos{args.train_ratio_cos}_cro{args.train_ratio_cro}.pt"
+train_new_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch" + "{}" + f"_train_ratio_cos{args.train_ratio_cos}_cro{args.train_ratio_cro}.pt"
+
 valid_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}_train_ratio_cos{args.train_ratio_cos}_cro{args.train_ratio_cro}_N_valid{N_valid}_valid_epoch{valid_epoch_num}.pt"
 
 os.makedirs(vis_path, exist_ok=True)

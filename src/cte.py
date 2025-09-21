@@ -620,6 +620,7 @@ class CritiGraph(torch.nn.Module):
     def train_all(
         self,        
         train_emb : torch.Tensor, # (N_train, dim)
+        train_top : torch.Tensor, # (N_train, *)
         vocab_emb : torch.Tensor, # (N_vocab, dim)
         train_tar : torch.Tensor, # (N_train, )   
     ):  
@@ -635,7 +636,7 @@ class CritiGraph(torch.nn.Module):
         self.train_emb     = train_emb.to(main_device)
         self.vocab_emb     = vocab_emb.to(main_device)
         
-        self.train_sampler = TrainSampler()
+        self.train_sampler = TrainSampler(train_top.to(main_device))
         self.vocab_sampler = VocabSampler()
 
         self.train_loss_cos_buf  = torch.zeros(N_train, device=main_device)
@@ -733,6 +734,16 @@ class CritiGraph(torch.nn.Module):
             ### step 3.6: 可视化
             if cur_epoch % vis_interval == 0 or cur_epoch == train_epoch_num - 1:
                 self.visualize(cur_epoch, "train")
+            try:
+                torch.save( 
+                    {
+                        "train_locations": self.train_locations.cpu(),
+                        "vocab_locations": self.vocab_locations.cpu(),
+                    },
+                    train_new_save_path.format(cur_epoch)
+                )
+            except Exception as e:
+                print(f"Warning: failed to save checkpoint at epoch {cur_epoch}: {e}")
 
         
         for thread in threads:
@@ -755,6 +766,7 @@ class CritiGraph(torch.nn.Module):
         self,
         train_emb : torch.Tensor, # (N_train, dim)
         valid_emb : torch.Tensor, # (N_train, dim)
+        valid_top : torch.Tensor, # (N_valid, *)
         vocab_emb : torch.Tensor, # (N_vocab, dim)
         valid_tar : torch.Tensor, # (N_train, )  
     ):
@@ -768,7 +780,7 @@ class CritiGraph(torch.nn.Module):
         self.vocab_emb     = vocab_emb.to(main_device)
         self.valid_tar     = valid_tar.long().to(main_device)
         
-        self.valid_sampler = ValidSampler()
+        self.valid_sampler = ValidSampler(valid_top.to(main_device))
 
         self.valid_loss_cos_buf  = torch.zeros(N_valid, device=main_device)
 
