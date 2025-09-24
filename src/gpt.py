@@ -315,47 +315,47 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     train_y, train_emb = [], []
     eval_y, eval_emb = [], []
     cache_save_path = os.path.join(cache_path, cache_save_path)
-    train_last_token_loss = []
-    valid_last_token_loss = []
-    train_last_token_acc  = []
-    valid_last_token_acc  = []
+    # train_last_token_loss = []
+    # valid_last_token_loss = []
+    # train_last_token_acc  = []
+    # valid_last_token_acc  = []
     
     ### step 2: 迭代获取动态嵌入（dyn_emb）与数据元信息（ix）
     for _ in range(cte_train_iters):
         X_train, Y_train, _ = get_batch('train', bs=cte_train_bs, to_cuda=True)
-        loss, dyn_emb, acc = model(X_train, targets=Y_train, return_dyn_loss=True) # (B, T), (B, T, E)
+        loss, dyn_emb, acc, _ = model(X_train, targets=Y_train, return_dyn_loss=True) # (B, T), (B, T, E)
         train_y.append(Y_train[:, -1].cpu())
         train_emb.append(dyn_emb[:, -1, :].cpu())
-        train_last_token_loss.append(loss[:, -1].cpu()) # (B,)
-        train_last_token_acc.append(acc[:, -1].cpu())   # (B,)
+        # train_last_token_loss.append(loss[:, -1].cpu()) # (B,)
+        # train_last_token_acc.append(acc[:, -1].cpu())   # (B,)
     
     for _ in range(cte_eval_iters):
         X_val, Y_val, _ = get_batch('val', bs=cte_eval_bs, to_cuda=True)
-        loss, dyn_emb, acc = model(X_val, targets=Y_val, return_dyn_loss=True) # (B, T), (B, T, E)
+        loss, dyn_emb, acc, _ = model(X_val, targets=Y_val, return_dyn_loss=True) # (B, T), (B, T, E)
         eval_y.append(Y_val[:, -1].cpu())
         eval_emb.append(dyn_emb[:, -1, :].cpu())
-        valid_last_token_loss.append(loss[:, -1].cpu()) # (B,)
-        valid_last_token_acc.append(acc[:, -1].cpu())   # (B,)
+        # valid_last_token_loss.append(loss[:, -1].cpu()) # (B,)
+        # valid_last_token_acc.append(acc[:, -1].cpu())   # (B,)
 
     ### step 3: 筛选 training 中 loss < 1.0 的部分，且
-    train_y_stack = torch.stack(train_y, dim=0).reshape(-1)  # (cte_train_iters * cte_train_bs)
-    train_emb_stack = torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
-    train_last_token_acc_stack = torch.cat(train_last_token_acc, dim=0) # (cte_train_iters * cte_train_bs)，这里虽然命名为 acc，但其实是 bool 值
-    # keep_indices = (train_last_token_loss_stack < 1.0)
-    keep_indices = (train_last_token_acc_stack == 1).nonzero(as_tuple=True)[0]
-    print(f"Before filtering: train cache length: {train_y_stack.shape[0]}, after filtering: {keep_indices.shape[0]}, after pow_2 filtering: ", end="")
-    ##### 为了保证一致性，我们只需要 2 的次方长度的数据
-    keep_indices = keep_indices[:2 ** int(torch.log2(torch.tensor(keep_indices.shape[0], dtype=torch.float32)).item())]
-    print(f"{keep_indices.shape[0]}")
+    # train_y_stack = torch.stack(train_y, dim=0).reshape(-1)  # (cte_train_iters * cte_train_bs)
+    # train_emb_stack = torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
+    # train_last_token_acc_stack = torch.cat(train_last_token_acc, dim=0) # (cte_train_iters * cte_train_bs)，这里虽然命名为 acc，但其实是 bool 值
+    # # keep_indices = (train_last_token_loss_stack < 1.0)
+    # keep_indices = (train_last_token_acc_stack == 1).nonzero(as_tuple=True)[0]
+    # print(f"Before filtering: train cache length: {train_y_stack.shape[0]}, after filtering: {keep_indices.shape[0]}, after pow_2 filtering: ", end="")
+    # ##### 为了保证一致性，我们只需要 2 的次方长度的数据
+    # keep_indices = keep_indices[:2 ** int(torch.log2(torch.tensor(keep_indices.shape[0], dtype=torch.float32)).item())]
+    # print(f"{keep_indices.shape[0]}")
     
-    train_y_filtered = train_y_stack[keep_indices]
-    train_emb_filtered = train_emb_stack[keep_indices]
+    # train_y_filtered = train_y_stack[keep_indices]
+    # train_emb_filtered = train_emb_stack[keep_indices]
     
     
     ### step 3: 拼接并保存
     train_cache = {
-        'y': train_y_filtered,  # (cte_train_iters * cte_train_bs)
-        'emb': train_emb_filtered # (cte_train_iters * cte_train_bs, n_embd)
+        'y': torch.stack(train_y, dim=0).reshape(-1),  # (cte_train_iters * cte_train_bs)
+        'emb': torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
     }
     eval_cache = {
         'y': torch.stack(eval_y, dim=0).reshape(-1),   # (cte_eval_iters  * cte_eval_bs)
@@ -365,28 +365,28 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     eval_cache_length = eval_cache['emb'].shape[0]
     
     ### step 4: 可视化 loss 的分布
-    train_last_token_loss = torch.cat(train_last_token_loss, dim=0).numpy()
-    valid_last_token_loss = torch.cat(valid_last_token_loss, dim=0).numpy()
+    # train_last_token_loss = torch.cat(train_last_token_loss, dim=0).numpy()
+    # valid_last_token_loss = torch.cat(valid_last_token_loss, dim=0).numpy()
     
-    fig, ax1 = plt.subplots()
+    # fig, ax1 = plt.subplots()
     
-    # Train loss histogram on left y-axis
-    ax1.hist(train_last_token_loss, bins=50, alpha=0.5, color='blue', label='Train Last Token Loss')
-    ax1.set_xlim((0, 1.5))
-    ax1.set_xlabel('Loss')
-    ax1.set_ylabel('Train Frequency', color='blue')
-    ax1.tick_params(axis='y', labelcolor='blue')
+    # # Train loss histogram on left y-axis
+    # ax1.hist(train_last_token_loss, bins=50, alpha=0.5, color='blue', label='Train Last Token Loss')
+    # ax1.set_xlim((0, 1.5))
+    # ax1.set_xlabel('Loss')
+    # ax1.set_ylabel('Train Frequency', color='blue')
+    # ax1.tick_params(axis='y', labelcolor='blue')
     
-    # Valid loss histogram on right y-axis
-    ax2 = ax1.twinx()
-    ax2.hist(valid_last_token_loss, bins=50, alpha=0.5, color='red', label='Valid Last Token Loss')
-    ax2.set_ylabel('Valid Frequency', color='red')
-    ax2.tick_params(axis='y', labelcolor='red')
+    # # Valid loss histogram on right y-axis
+    # ax2 = ax1.twinx()
+    # ax2.hist(valid_last_token_loss, bins=50, alpha=0.5, color='red', label='Valid Last Token Loss')
+    # ax2.set_ylabel('Valid Frequency', color='red')
+    # ax2.tick_params(axis='y', labelcolor='red')
     
-    plt.title('Distribution of Last Token Loss')
-    fig.tight_layout()
-    plt.savefig(f'last_token_loss_distribution_ori{train_last_token_loss.shape[0]}_cur{train_cache_length}.png')
-    plt.close()
+    # plt.title('Distribution of Last Token Loss')
+    # fig.tight_layout()
+    # plt.savefig(f'last_token_loss_distribution_ori{train_last_token_loss.shape[0]}_cur{train_cache_length}.png')
+    # plt.close()
     
     print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
     save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
@@ -474,8 +474,13 @@ if __name__ == "__main__":
     
     
     gpt_ckpt = gpt_ckpt.format(3999)
-    train_cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_train_new_cache_onlylast_onlygood_filtered.pth"
-    valid_cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_query_vs_train{}_filtered.pth"
+    # get_cte_train_and_test(gpt_ckpt, "gpt65_normed_b128_iters_3999_l{}_{}_cache.pth")
+    if not use_filter:
+        train_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_train_cache.pth"
+        valid_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_valid_cache_queried_l{}.pth"
+    else:
+        train_cache_ckpt = "65_normed_b256_iters_3999_l{}_train_new_cache_onlylast_onlygood_filtered.pth"
+        valid_cache_ckpt = "65_normed_b256_iters_3999_l{}_query_vs_train{}_filtered.pth"
     
     train_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     

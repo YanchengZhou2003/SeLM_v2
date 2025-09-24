@@ -1,0 +1,378 @@
+Before CTE Training: train eu loss: 1.057024359703064, eval eu loss: 1.4517745971679688
+Before CTE Training: train eu acc: 0.66552734375, eval eu acc: 0.5794677734375
+epoch   0 summary: train_cos_loss : 0.106951, vocab_cro_loss : 4.688925, 
+train loss: 4.4439, accuracy: 0.0366
+epoch   1 summary: train_cos_loss : 0.099661, vocab_cro_loss : 4.443348, 
+epoch   2 summary: train_cos_loss : 0.085623, vocab_cro_loss : 3.919575, 
+epoch   3 summary: train_cos_loss : 0.068191, vocab_cro_loss : 3.369964, 
+epoch   4 summary: train_cos_loss : 0.052403, vocab_cro_loss : 2.914202, 
+epoch   5 summary: train_cos_loss : 0.040780, vocab_cro_loss : 2.721585, 
+epoch   6 summary: train_cos_loss : 0.033127, vocab_cro_loss : 2.521869, 
+epoch   7 summary: train_cos_loss : 0.027717, vocab_cro_loss : 2.601382, 
+epoch   8 summary: train_cos_loss : 0.023890, vocab_cro_loss : 2.496080, 
+epoch   9 summary: train_cos_loss : 0.021132, vocab_cro_loss : 2.352811, 
+epoch  10 summary: train_cos_loss : 0.019357, vocab_cro_loss : 2.339871, 
+train loss: 2.3378, accuracy: 0.4741
+epoch  11 summary: train_cos_loss : 0.017839, vocab_cro_loss : 2.336650, 
+epoch  12 summary: train_cos_loss : 0.016519, vocab_cro_loss : 2.406033, 
+epoch  13 summary: train_cos_loss : 0.015401, vocab_cro_loss : 2.325024, 
+epoch  14 summary: train_cos_loss : 0.014557, vocab_cro_loss : 2.132897, 
+epoch  15 summary: train_cos_loss : 0.013850, vocab_cro_loss : 2.182137, 
+epoch  16 summary: train_cos_loss : 0.013255, vocab_cro_loss : 2.355289, 
+epoch  17 summary: train_cos_loss : 0.012722, vocab_cro_loss : 2.138420, 
+epoch  18 summary: train_cos_loss : 0.012261, vocab_cro_loss : 2.258720, 
+epoch  19 summary: train_cos_loss : 0.011966, vocab_cro_loss : 2.041483, 
+epoch  20 summary: train_cos_loss : 0.011833, vocab_cro_loss : 2.074925, 
+train loss: 2.0000, accuracy: 0.5259
+epoch  21 summary: train_cos_loss : 0.011528, vocab_cro_loss : 1.999560, 
+epoch  22 summary: train_cos_loss : 0.011303, vocab_cro_loss : 1.922890, 
+epoch  23 summary: train_cos_loss : 0.011092, vocab_cro_loss : 1.873028, 
+epoch  24 summary: train_cos_loss : 0.010912, vocab_cro_loss : 1.969131, 
+epoch  25 summary: train_cos_loss : 0.010722, vocab_cro_loss : 2.079549, 
+epoch  26 summary: train_cos_loss : 0.010579, vocab_cro_loss : 2.042450, 
+epoch  27 summary: train_cos_loss : 0.010469, vocab_cro_loss : 2.067779, 
+epoch  28 summary: train_cos_loss : 0.010375, vocab_cro_loss : 2.007318, 
+epoch  29 summary: train_cos_loss : 0.010275, vocab_cro_loss : 1.954460, 
+epoch  30 summary: train_cos_loss : 0.010305, vocab_cro_loss : 1.884714, 
+train loss: 1.8329, accuracy: 0.5190
+epoch  31 summary: train_cos_loss : 0.010205, vocab_cro_loss : 1.832607, 
+epoch  32 summary: train_cos_loss : 0.010121, vocab_cro_loss : 1.809205, 
+epoch  33 summary: train_cos_loss : 0.010018, vocab_cro_loss : 1.879678, 
+epoch  34 summary: train_cos_loss : 0.009929, vocab_cro_loss : 2.090238, 
+epoch  35 summary: train_cos_loss : 0.009856, vocab_cro_loss : 1.961552, 
+epoch  36 summary: train_cos_loss : 0.009793, vocab_cro_loss : 2.050110, 
+epoch  37 summary: train_cos_loss : 0.009723, vocab_cro_loss : 1.957360, 
+epoch  38 summary: train_cos_loss : 0.009670, vocab_cro_loss : 1.941096, 
+epoch  39 summary: train_cos_loss : 0.009636, vocab_cro_loss : 1.882329, 
+epoch  40 summary: train_cos_loss : 0.009719, vocab_cro_loss : 1.850811, 
+train loss: 1.8714, accuracy: 0.5029
+epoch  41 summary: train_cos_loss : 0.009668, vocab_cro_loss : 1.870744, 
+epoch  42 summary: train_cos_loss : 0.009610, vocab_cro_loss : 1.851506, 
+epoch  43 summary: train_cos_loss : 0.009555, vocab_cro_loss : 1.840489, 
+epoch  44 summary: train_cos_loss : 0.009517, vocab_cro_loss : 1.837489, 
+epoch  45 summary: train_cos_loss : 0.009476, vocab_cro_loss : 1.840605, 
+epoch  46 summary: train_cos_loss : 0.009442, vocab_cro_loss : 1.914019, 
+epoch  47 summary: train_cos_loss : 0.009417, vocab_cro_loss : 1.857497, 
+epoch  48 summary: train_cos_loss : 0.009394, vocab_cro_loss : 1.835658, 
+epoch  49 summary: train_cos_loss : 0.009374, vocab_cro_loss : 1.837816, 
+epoch  50 summary: train_cos_loss : 0.009467, vocab_cro_loss : 1.823062, 
+train loss: 1.7905, accuracy: 0.5161
+epoch  51 summary: train_cos_loss : 0.009425, vocab_cro_loss : 1.790121, 
+epoch  52 summary: train_cos_loss : 0.009376, vocab_cro_loss : 1.813794, 
+epoch  53 summary: train_cos_loss : 0.009345, vocab_cro_loss : 1.821130, 
+epoch  54 summary: train_cos_loss : 0.009305, vocab_cro_loss : 1.803118, 
+epoch  55 summary: train_cos_loss : 0.009281, vocab_cro_loss : 1.815647, 
+epoch  56 summary: train_cos_loss : 0.009249, vocab_cro_loss : 1.832085, 
+epoch  57 summary: train_cos_loss : 0.009227, vocab_cro_loss : 1.780340, 
+epoch  58 summary: train_cos_loss : 0.009213, vocab_cro_loss : 1.842546, 
+epoch  59 summary: train_cos_loss : 0.009179, vocab_cro_loss : 1.827550, 
+epoch  60 summary: train_cos_loss : 0.009270, vocab_cro_loss : 1.821571, 
+train loss: 1.8870, accuracy: 0.5173
+epoch  61 summary: train_cos_loss : 0.009234, vocab_cro_loss : 1.886607, 
+epoch  62 summary: train_cos_loss : 0.009201, vocab_cro_loss : 1.839753, 
+epoch  63 summary: train_cos_loss : 0.009170, vocab_cro_loss : 1.807328, 
+epoch  64 summary: train_cos_loss : 0.009147, vocab_cro_loss : 1.793716, 
+epoch  65 summary: train_cos_loss : 0.009129, vocab_cro_loss : 1.795047, 
+epoch  66 summary: train_cos_loss : 0.009107, vocab_cro_loss : 1.764633, 
+epoch  67 summary: train_cos_loss : 0.009103, vocab_cro_loss : 1.739902, 
+epoch  68 summary: train_cos_loss : 0.009078, vocab_cro_loss : 1.743016, 
+epoch  69 summary: train_cos_loss : 0.009060, vocab_cro_loss : 1.769253, 
+epoch  70 summary: train_cos_loss : 0.009179, vocab_cro_loss : 1.744927, 
+train loss: 1.7524, accuracy: 0.5261
+epoch  71 summary: train_cos_loss : 0.009159, vocab_cro_loss : 1.752041, 
+epoch  72 summary: train_cos_loss : 0.009130, vocab_cro_loss : 1.744112, 
+epoch  73 summary: train_cos_loss : 0.009099, vocab_cro_loss : 1.814103, 
+epoch  74 summary: train_cos_loss : 0.009077, vocab_cro_loss : 1.847749, 
+epoch  75 summary: train_cos_loss : 0.009052, vocab_cro_loss : 1.807034, 
+epoch  76 summary: train_cos_loss : 0.009038, vocab_cro_loss : 1.761114, 
+epoch  77 summary: train_cos_loss : 0.009028, vocab_cro_loss : 1.806140, 
+epoch  78 summary: train_cos_loss : 0.009015, vocab_cro_loss : 1.756430, 
+epoch  79 summary: train_cos_loss : 0.009007, vocab_cro_loss : 1.781796, 
+epoch  80 summary: train_cos_loss : 0.009089, vocab_cro_loss : 1.751385, 
+train loss: 1.6996, accuracy: 0.5361
+epoch  81 summary: train_cos_loss : 0.009060, vocab_cro_loss : 1.699336, 
+epoch  82 summary: train_cos_loss : 0.009033, vocab_cro_loss : 1.700198, 
+epoch  83 summary: train_cos_loss : 0.009011, vocab_cro_loss : 1.700083, 
+epoch  84 summary: train_cos_loss : 0.008989, vocab_cro_loss : 1.691673, 
+epoch  85 summary: train_cos_loss : 0.008970, vocab_cro_loss : 1.693592, 
+epoch  86 summary: train_cos_loss : 0.008954, vocab_cro_loss : 1.662538, 
+epoch  87 summary: train_cos_loss : 0.008942, vocab_cro_loss : 1.663893, 
+epoch  88 summary: train_cos_loss : 0.008923, vocab_cro_loss : 1.640348, 
+epoch  89 summary: train_cos_loss : 0.008911, vocab_cro_loss : 1.632191, 
+epoch  90 summary: train_cos_loss : 0.009028, vocab_cro_loss : 1.630484, 
+train loss: 1.6639, accuracy: 0.5364
+epoch  91 summary: train_cos_loss : 0.008995, vocab_cro_loss : 1.663624, 
+epoch  92 summary: train_cos_loss : 0.008975, vocab_cro_loss : 1.679303, 
+epoch  93 summary: train_cos_loss : 0.008958, vocab_cro_loss : 1.720923, 
+epoch  94 summary: train_cos_loss : 0.008932, vocab_cro_loss : 1.684749, 
+epoch  95 summary: train_cos_loss : 0.008915, vocab_cro_loss : 1.705077, 
+epoch  96 summary: train_cos_loss : 0.008898, vocab_cro_loss : 1.717156, 
+epoch  97 summary: train_cos_loss : 0.008879, vocab_cro_loss : 1.709232, 
+epoch  98 summary: train_cos_loss : 0.008874, vocab_cro_loss : 1.701856, 
+epoch  99 summary: train_cos_loss : 0.008860, vocab_cro_loss : 1.744455, 
+epoch 100 summary: train_cos_loss : 0.008952, vocab_cro_loss : 1.684164, 
+train loss: 1.7240, accuracy: 0.5400
+epoch 101 summary: train_cos_loss : 0.008934, vocab_cro_loss : 1.723540, 
+epoch 102 summary: train_cos_loss : 0.008901, vocab_cro_loss : 1.663734, 
+epoch 103 summary: train_cos_loss : 0.008880, vocab_cro_loss : 1.681743, 
+epoch 104 summary: train_cos_loss : 0.008855, vocab_cro_loss : 1.661700, 
+epoch 105 summary: train_cos_loss : 0.008840, vocab_cro_loss : 1.701942, 
+epoch 106 summary: train_cos_loss : 0.008823, vocab_cro_loss : 1.723408, 
+epoch 107 summary: train_cos_loss : 0.008807, vocab_cro_loss : 1.636418, 
+epoch 108 summary: train_cos_loss : 0.008793, vocab_cro_loss : 1.644870, 
+epoch 109 summary: train_cos_loss : 0.008781, vocab_cro_loss : 1.655145, 
+epoch 110 summary: train_cos_loss : 0.008853, vocab_cro_loss : 1.675912, 
+train loss: 1.7504, accuracy: 0.5286
+epoch 111 summary: train_cos_loss : 0.008822, vocab_cro_loss : 1.749629, 
+epoch 112 summary: train_cos_loss : 0.008799, vocab_cro_loss : 1.824118, 
+epoch 113 summary: train_cos_loss : 0.008780, vocab_cro_loss : 1.822738, 
+epoch 114 summary: train_cos_loss : 0.008763, vocab_cro_loss : 1.804347, 
+epoch 115 summary: train_cos_loss : 0.008752, vocab_cro_loss : 1.751087, 
+epoch 116 summary: train_cos_loss : 0.008743, vocab_cro_loss : 1.769718, 
+epoch 117 summary: train_cos_loss : 0.008745, vocab_cro_loss : 1.797583, 
+epoch 118 summary: train_cos_loss : 0.008731, vocab_cro_loss : 1.744396, 
+epoch 119 summary: train_cos_loss : 0.008719, vocab_cro_loss : 1.787729, 
+epoch 120 summary: train_cos_loss : 0.008818, vocab_cro_loss : 1.785240, 
+train loss: 1.7702, accuracy: 0.5332
+epoch 121 summary: train_cos_loss : 0.008798, vocab_cro_loss : 1.769962, 
+epoch 122 summary: train_cos_loss : 0.008773, vocab_cro_loss : 1.807200, 
+epoch 123 summary: train_cos_loss : 0.008767, vocab_cro_loss : 1.754482, 
+epoch 124 summary: train_cos_loss : 0.008741, vocab_cro_loss : 1.738107, 
+epoch 125 summary: train_cos_loss : 0.008723, vocab_cro_loss : 1.814417, 
+epoch 126 summary: train_cos_loss : 0.008710, vocab_cro_loss : 1.862058, 
+epoch 127 summary: train_cos_loss : 0.008712, vocab_cro_loss : 1.770634, 
+epoch 128 summary: train_cos_loss : 0.008700, vocab_cro_loss : 1.734270, 
+epoch 129 summary: train_cos_loss : 0.008684, vocab_cro_loss : 1.775375, 
+epoch 130 summary: train_cos_loss : 0.008762, vocab_cro_loss : 1.777784, 
+train loss: 1.9488, accuracy: 0.5217
+epoch 131 summary: train_cos_loss : 0.008741, vocab_cro_loss : 1.948059, 
+epoch 132 summary: train_cos_loss : 0.008716, vocab_cro_loss : 1.855045, 
+epoch 133 summary: train_cos_loss : 0.008696, vocab_cro_loss : 1.748012, 
+epoch 134 summary: train_cos_loss : 0.008689, vocab_cro_loss : 1.698993, 
+epoch 135 summary: train_cos_loss : 0.008677, vocab_cro_loss : 1.668963, 
+epoch 136 summary: train_cos_loss : 0.008663, vocab_cro_loss : 1.764978, 
+epoch 137 summary: train_cos_loss : 0.008660, vocab_cro_loss : 1.786749, 
+epoch 138 summary: train_cos_loss : 0.008652, vocab_cro_loss : 1.769377, 
+epoch 139 summary: train_cos_loss : 0.008646, vocab_cro_loss : 1.735126, 
+epoch 140 summary: train_cos_loss : 0.008730, vocab_cro_loss : 1.737965, 
+train loss: 1.7095, accuracy: 0.5383
+epoch 141 summary: train_cos_loss : 0.008710, vocab_cro_loss : 1.709175, 
+epoch 142 summary: train_cos_loss : 0.008693, vocab_cro_loss : 1.728003, 
+epoch 143 summary: train_cos_loss : 0.008673, vocab_cro_loss : 1.703637, 
+epoch 144 summary: train_cos_loss : 0.008658, vocab_cro_loss : 1.699216, 
+epoch 145 summary: train_cos_loss : 0.008650, vocab_cro_loss : 1.692980, 
+epoch 146 summary: train_cos_loss : 0.008640, vocab_cro_loss : 1.784287, 
+epoch 147 summary: train_cos_loss : 0.008635, vocab_cro_loss : 1.872571, 
+epoch 148 summary: train_cos_loss : 0.008617, vocab_cro_loss : 1.789036, 
+epoch 149 summary: train_cos_loss : 0.008606, vocab_cro_loss : 1.721802, 
+train loss: 1.6953, accuracy: 0.5276
+all                         329062.732ms
+all_epoch                   326601.885ms
+all_preparation               2460.785ms
+all_preparation_2             2458.877ms
+all_preparation_3                1.886ms
+epoch                         1957.203ms
+epoch_pos_train                  3.999ms
+epoch_preparation                9.954ms
+epoch_train                   1938.121ms
+epoch_valid                      4.212ms
+----------------------------------------
+all                         329062.732ms
+  all_epoch             99.25%
+  all_preparation        0.75%
+all_preparation               2460.785ms
+  all_preparation_2     99.92%
+  all_preparation_3      0.08%
+epoch                       293580.401ms
+  epoch_train           99.03%
+  epoch_preparation      0.51%
+  epoch_valid            0.22%
+  epoch_pos_train        0.20%
+epoch   0 summary: valid_cos_loss : 0.322860, 
+valid loss: 3.5091, accuracy: 0.1954
+epoch   1 summary: valid_cos_loss : 0.183224, 
+epoch   2 summary: valid_cos_loss : 0.107918, 
+epoch   3 summary: valid_cos_loss : 0.068951, 
+epoch   4 summary: valid_cos_loss : 0.049105, 
+epoch   5 summary: valid_cos_loss : 0.038548, 
+epoch   6 summary: valid_cos_loss : 0.032185, 
+epoch   7 summary: valid_cos_loss : 0.028330, 
+epoch   8 summary: valid_cos_loss : 0.025864, 
+epoch   9 summary: valid_cos_loss : 0.024002, 
+epoch  10 summary: valid_cos_loss : 0.023050, 
+valid loss: 2.4213, accuracy: 0.4064
+epoch  11 summary: valid_cos_loss : 0.021949, 
+epoch  12 summary: valid_cos_loss : 0.021091, 
+epoch  13 summary: valid_cos_loss : 0.020359, 
+epoch  14 summary: valid_cos_loss : 0.019835, 
+epoch  15 summary: valid_cos_loss : 0.019333, 
+epoch  16 summary: valid_cos_loss : 0.018985, 
+epoch  17 summary: valid_cos_loss : 0.018684, 
+epoch  18 summary: valid_cos_loss : 0.018467, 
+epoch  19 summary: valid_cos_loss : 0.018332, 
+epoch  20 summary: valid_cos_loss : 0.018332, 
+valid loss: 2.3881, accuracy: 0.4105
+epoch  21 summary: valid_cos_loss : 0.018127, 
+epoch  22 summary: valid_cos_loss : 0.017759, 
+epoch  23 summary: valid_cos_loss : 0.017547, 
+epoch  24 summary: valid_cos_loss : 0.017458, 
+epoch  25 summary: valid_cos_loss : 0.017242, 
+epoch  26 summary: valid_cos_loss : 0.017164, 
+epoch  27 summary: valid_cos_loss : 0.017113, 
+epoch  28 summary: valid_cos_loss : 0.017089, 
+epoch  29 summary: valid_cos_loss : 0.016873, 
+epoch  30 summary: valid_cos_loss : 0.017009, 
+valid loss: 2.3880, accuracy: 0.4084
+epoch  31 summary: valid_cos_loss : 0.016926, 
+epoch  32 summary: valid_cos_loss : 0.016707, 
+epoch  33 summary: valid_cos_loss : 0.016470, 
+epoch  34 summary: valid_cos_loss : 0.016415, 
+epoch  35 summary: valid_cos_loss : 0.016404, 
+epoch  36 summary: valid_cos_loss : 0.016362, 
+epoch  37 summary: valid_cos_loss : 0.016388, 
+epoch  38 summary: valid_cos_loss : 0.016243, 
+epoch  39 summary: valid_cos_loss : 0.016240, 
+epoch  40 summary: valid_cos_loss : 0.016464, 
+valid loss: 2.3794, accuracy: 0.4086
+epoch  41 summary: valid_cos_loss : 0.016218, 
+epoch  42 summary: valid_cos_loss : 0.016290, 
+epoch  43 summary: valid_cos_loss : 0.016181, 
+epoch  44 summary: valid_cos_loss : 0.016015, 
+epoch  45 summary: valid_cos_loss : 0.016016, 
+epoch  46 summary: valid_cos_loss : 0.015853, 
+epoch  47 summary: valid_cos_loss : 0.015944, 
+epoch  48 summary: valid_cos_loss : 0.015978, 
+epoch  49 summary: valid_cos_loss : 0.015820, 
+epoch  50 summary: valid_cos_loss : 0.016008, 
+valid loss: 2.3756, accuracy: 0.4084
+epoch  51 summary: valid_cos_loss : 0.015996, 
+epoch  52 summary: valid_cos_loss : 0.015873, 
+epoch  53 summary: valid_cos_loss : 0.015811, 
+epoch  54 summary: valid_cos_loss : 0.015694, 
+epoch  55 summary: valid_cos_loss : 0.015543, 
+epoch  56 summary: valid_cos_loss : 0.015585, 
+epoch  57 summary: valid_cos_loss : 0.015600, 
+epoch  58 summary: valid_cos_loss : 0.015569, 
+epoch  59 summary: valid_cos_loss : 0.015476, 
+epoch  60 summary: valid_cos_loss : 0.015629, 
+valid loss: 2.3801, accuracy: 0.4086
+epoch  61 summary: valid_cos_loss : 0.015643, 
+epoch  62 summary: valid_cos_loss : 0.015531, 
+epoch  63 summary: valid_cos_loss : 0.015674, 
+epoch  64 summary: valid_cos_loss : 0.015496, 
+epoch  65 summary: valid_cos_loss : 0.015619, 
+epoch  66 summary: valid_cos_loss : 0.015541, 
+epoch  67 summary: valid_cos_loss : 0.015467, 
+epoch  68 summary: valid_cos_loss : 0.015311, 
+epoch  69 summary: valid_cos_loss : 0.015356, 
+epoch  70 summary: valid_cos_loss : 0.015473, 
+valid loss: 2.3812, accuracy: 0.4103
+epoch  71 summary: valid_cos_loss : 0.015431, 
+epoch  72 summary: valid_cos_loss : 0.015438, 
+epoch  73 summary: valid_cos_loss : 0.015436, 
+epoch  74 summary: valid_cos_loss : 0.015441, 
+epoch  75 summary: valid_cos_loss : 0.015373, 
+epoch  76 summary: valid_cos_loss : 0.015298, 
+epoch  77 summary: valid_cos_loss : 0.015348, 
+epoch  78 summary: valid_cos_loss : 0.015246, 
+epoch  79 summary: valid_cos_loss : 0.015360, 
+epoch  80 summary: valid_cos_loss : 0.015358, 
+valid loss: 2.3787, accuracy: 0.4099
+epoch  81 summary: valid_cos_loss : 0.015283, 
+epoch  82 summary: valid_cos_loss : 0.015260, 
+epoch  83 summary: valid_cos_loss : 0.015236, 
+epoch  84 summary: valid_cos_loss : 0.015190, 
+epoch  85 summary: valid_cos_loss : 0.015164, 
+epoch  86 summary: valid_cos_loss : 0.015335, 
+epoch  87 summary: valid_cos_loss : 0.015215, 
+epoch  88 summary: valid_cos_loss : 0.015315, 
+epoch  89 summary: valid_cos_loss : 0.015274, 
+epoch  90 summary: valid_cos_loss : 0.015309, 
+valid loss: 2.3807, accuracy: 0.4089
+epoch  91 summary: valid_cos_loss : 0.015307, 
+epoch  92 summary: valid_cos_loss : 0.015189, 
+epoch  93 summary: valid_cos_loss : 0.015123, 
+epoch  94 summary: valid_cos_loss : 0.015140, 
+epoch  95 summary: valid_cos_loss : 0.015016, 
+epoch  96 summary: valid_cos_loss : 0.015251, 
+epoch  97 summary: valid_cos_loss : 0.015146, 
+epoch  98 summary: valid_cos_loss : 0.015031, 
+epoch  99 summary: valid_cos_loss : 0.015025, 
+epoch 100 summary: valid_cos_loss : 0.015125, 
+valid loss: 2.3779, accuracy: 0.4094
+epoch 101 summary: valid_cos_loss : 0.015118, 
+epoch 102 summary: valid_cos_loss : 0.015088, 
+epoch 103 summary: valid_cos_loss : 0.015130, 
+epoch 104 summary: valid_cos_loss : 0.015044, 
+epoch 105 summary: valid_cos_loss : 0.014989, 
+epoch 106 summary: valid_cos_loss : 0.014997, 
+epoch 107 summary: valid_cos_loss : 0.014961, 
+epoch 108 summary: valid_cos_loss : 0.015025, 
+epoch 109 summary: valid_cos_loss : 0.014934, 
+epoch 110 summary: valid_cos_loss : 0.015087, 
+valid loss: 2.3740, accuracy: 0.4108
+epoch 111 summary: valid_cos_loss : 0.015166, 
+epoch 112 summary: valid_cos_loss : 0.015157, 
+epoch 113 summary: valid_cos_loss : 0.014913, 
+epoch 114 summary: valid_cos_loss : 0.014896, 
+epoch 115 summary: valid_cos_loss : 0.014931, 
+epoch 116 summary: valid_cos_loss : 0.014963, 
+epoch 117 summary: valid_cos_loss : 0.014922, 
+epoch 118 summary: valid_cos_loss : 0.014887, 
+epoch 119 summary: valid_cos_loss : 0.014991, 
+epoch 120 summary: valid_cos_loss : 0.014986, 
+valid loss: 2.3766, accuracy: 0.4093
+epoch 121 summary: valid_cos_loss : 0.014927, 
+epoch 122 summary: valid_cos_loss : 0.015037, 
+epoch 123 summary: valid_cos_loss : 0.014990, 
+epoch 124 summary: valid_cos_loss : 0.014988, 
+epoch 125 summary: valid_cos_loss : 0.014819, 
+epoch 126 summary: valid_cos_loss : 0.014899, 
+epoch 127 summary: valid_cos_loss : 0.014893, 
+epoch 128 summary: valid_cos_loss : 0.014945, 
+epoch 129 summary: valid_cos_loss : 0.014764, 
+epoch 130 summary: valid_cos_loss : 0.014977, 
+valid loss: 2.3754, accuracy: 0.4087
+epoch 131 summary: valid_cos_loss : 0.014951, 
+epoch 132 summary: valid_cos_loss : 0.014864, 
+epoch 133 summary: valid_cos_loss : 0.014907, 
+epoch 134 summary: valid_cos_loss : 0.014849, 
+epoch 135 summary: valid_cos_loss : 0.014855, 
+epoch 136 summary: valid_cos_loss : 0.014803, 
+epoch 137 summary: valid_cos_loss : 0.014701, 
+epoch 138 summary: valid_cos_loss : 0.014736, 
+epoch 139 summary: valid_cos_loss : 0.014765, 
+epoch 140 summary: valid_cos_loss : 0.014918, 
+valid loss: 2.3739, accuracy: 0.4075
+epoch 141 summary: valid_cos_loss : 0.014889, 
+epoch 142 summary: valid_cos_loss : 0.014885, 
+epoch 143 summary: valid_cos_loss : 0.014734, 
+epoch 144 summary: valid_cos_loss : 0.014805, 
+epoch 145 summary: valid_cos_loss : 0.014693, 
+epoch 146 summary: valid_cos_loss : 0.014732, 
+epoch 147 summary: valid_cos_loss : 0.014767, 
+epoch 148 summary: valid_cos_loss : 0.014713, 
+epoch 149 summary: valid_cos_loss : 0.014750, 
+valid loss: 2.3722, accuracy: 0.4102
+all                         601199.943ms
+all_epoch                   601180.859ms
+all_preparation                 19.053ms
+all_preparation_2               17.667ms
+all_preparation_3                1.366ms
+epoch                         3870.725ms
+epoch_pos_train                  3.758ms
+epoch_preparation                0.452ms
+epoch_train                   3858.484ms
+epoch_valid                      7.558ms
+----------------------------------------
+all                         601199.943ms
+  all_epoch            100.00%
+  all_preparation        0.00%
+all_preparation                 19.053ms
+  all_preparation_2     92.72%
+  all_preparation_3      7.17%
+epoch                       580608.712ms
+  epoch_train           99.68%
+  epoch_valid            0.20%
+  epoch_pos_train        0.10%
+  epoch_preparation      0.01%

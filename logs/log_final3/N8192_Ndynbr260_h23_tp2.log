@@ -1,0 +1,33 @@
+Before CTE Training: train eu loss: 1.0715794563293457, eval eu loss: 1.4517745971679688
+Before CTE Training: train eu acc: 0.6578369140625, eval eu acc: 0.5794677734375
+epoch   0 summary: train_cos_loss : 0.176815, vocab_cro_loss : 4.825066, 
+train loss: 4.2016, accuracy: 0.0771
+epoch   1 summary: train_cos_loss : 0.153209, vocab_cro_loss : 4.198592, 
+epoch   2 summary: train_cos_loss : 0.119206, vocab_cro_loss : 3.453746, 
+epoch   3 summary: train_cos_loss : 0.095014, vocab_cro_loss : 3.155062, 
+epoch   4 summary: train_cos_loss : 0.079457, vocab_cro_loss : 2.873668, 
+train loss: 2.7884, accuracy: 0.3599
+all                         177824.221ms
+all_epoch                   122498.774ms
+all_preparation              55325.376ms
+all_preparation_2            55322.046ms
+all_preparation_3                3.262ms
+epoch                        21447.336ms
+epoch_pos_train                  6.348ms
+epoch_preparation              818.624ms
+epoch_train                  17288.904ms
+epoch_valid                   3326.720ms
+----------------------------------------
+all                         177824.221ms
+  all_epoch             68.89%
+  all_preparation       31.11%
+all_preparation              55325.376ms
+  all_preparation_2     99.99%
+  all_preparation_3      0.01%
+epoch                       107236.680ms
+  epoch_train           80.61%
+  epoch_valid           15.51%
+  epoch_preparation      3.82%
+  epoch_pos_train        0.03%
+epoch   0 summary: valid_cos_loss : 0.210232, 
+valid loss: 3.4214, accuracy: 0.2313

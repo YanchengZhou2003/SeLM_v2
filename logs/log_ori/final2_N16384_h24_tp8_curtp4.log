@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "/data3/gc/SeLM_v2/src/utils.py", line 1341, in wrapper
+    return func(*args, **kwargs)
+  File "/data3/gc/SeLM_v2/src/cte.py", line 549, in train_epoch
+    self.train_vocab_blocks(sid)
+  File "/data3/gc/SeLM_v2/src/cte.py", line 462, in train_vocab_blocks
+    loss  = self.loom_vocab(
+  File "/data3/gc/SeLM_v2/src/cte.py", line 228, in loom_vocab
+    cos_nei_cnc = self.cos_similarity(pos_loc[:, None, None, :], cnc_loc[None, :, :, :])
+  File "/data3/gc/SeLM_v2/src/cte.py", line 138, in cos_similarity
+    _, exp = torch.frexp((xor_result + 1).to(torch.float32))
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.29 GiB. GPU 6 has a total capacity of 23.69 GiB of which 1.80 GiB is free. Including non-PyTorch memory, this process has 3.76 GiB memory in use. Process 2690791 has 3.80 GiB memory in use. Process 2690790 has 5.47 GiB memory in use. Process 2690788 has 9.42 GiB memory in use. Of the allocated memory 2.88 GiB is allocated by PyTorch, and 595.29 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
