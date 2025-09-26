@@ -25,40 +25,25 @@ import networkx as nx
 class TrainSampler(BaseSample):
     def __init__(
         self, 
-        train_top: torch.Tensor
     ):
-        """
-        基于 d-正则随机图生成 Expander Graph.
-        
-        """
         super().__init__()
         
-        self.N_top      = N_dynbr // 2
-        self.N_expander = N_dynbr // 2 + (N_dynbr & 1)
-        assert self.N_top + self.N_expander == N_dynbr, f"N_top + N_expander 必须等于 N_dynbr, 当前 {self.N_top} + {self.N_expander} != {N_dynbr}"
-        
-        top_graph  = train_top[:, :self.N_top] 
         expander_graph: List[List[int]] = []
         
-        _G = ig.Graph.K_Regular(n=N_train, k=self.N_expander, directed=False, multiple=False)
+        _G = ig.Graph.K_Regular(n=N_train, k=N_dynbr, directed=False, multiple=False)
         for node in range(N_train):
             neighbors = list(_G.neighbors(node))
             expander_graph.append(neighbors)
             
-        self.expander_graph = torch.tensor(expander_graph, dtype=torch.long, device=main_device)
-        self.dyn_graph = torch.cat([self.expander_graph, top_graph.to(main_device)], dim=1) # (N_train, N_dynbr)
+        self.dyn_graph = torch.tensor(expander_graph, dtype=torch.long, device=main_device)        # (N_train, N_dynbr)
         self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_train, 1) # (N_train, N_stnbr)
         
-        
-        
-        
-            
     def get_connection(self, block: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.dyn_graph[block[0]:block[1]], self.sta_graph[block[0]:block[1]]  # (T_train, N_dynbr), (T_train, N_stnbr) 
         
     def reset_indices(self):
         randperm = torch.randperm(N_train, device=main_device)
-        self.dyn_graph[:, :self.N_expander] = self.dyn_graph[randperm, :self.N_expander]
+        self.dyn_graph = self.dyn_graph[randperm]
 
 '''
 class VocabSampler(BaseSample):
@@ -98,32 +83,22 @@ class VocabSampler(BaseSample):
 class ValidSampler(BaseSample):
     def __init__(
         self, 
-        valid_top: torch.Tensor,
-        train_expander_graph: torch.Tensor
+        train_dyn_graph: torch.Tensor
     ):
         """
         """
-        self.N_top        = N_dynbr // 2
-        self.N_expander   = N_dynbr // 2 + (N_dynbr & 1)
-        assert self.N_top + self.N_expander == N_dynbr, f"N_top + N_expander 必须等于 N_dynbr, 当前 {self.N_top} + {self.N_expander} != {N_dynbr}"
-        assert self.N_expander == train_expander_graph.shape[1], f"N_expander 必须等于 train_expander_graph 的邻居数, 当前 {self.N_expander} != {train_expander_graph.shape[1]}"
-        
-        top_graph       = valid_top[:, :self.N_top]
         random_indices  = torch.randint(0, N_train, (N_valid,), device=main_device)
-        
-        self.train_expander_graph = train_expander_graph.to(main_device)
-        self.dyn_graph = torch.cat([
-            self.train_expander_graph[random_indices], 
-            top_graph.to(main_device)
-        ], dim=1) # (N_valid, N_dynbr)
+
+        self.train_dyn_graph = train_dyn_graph.to(main_device)
+        self.dyn_graph = train_dyn_graph[random_indices] # (N_valid, N_dynbr)
         self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_valid, 1) # (N_valid, N_stnbr)
 
     def get_connection(self, block: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.dyn_graph[block[0]:block[1]], self.sta_graph[block[0]:block[1]]
 
     def reset_indices(self):
-        random_indices                      = torch.randint(0, N_train, (N_valid,), device=main_device)
-        self.dyn_graph[:, :self.N_expander] = self.train_expander_graph[random_indices]
+        random_indices = torch.randint(0, N_train, (N_valid,), device=main_device) # (N_valid,)
+        self.dyn_graph = self.train_dyn_graph[random_indices] # (N_valid, N_dynbr)
 
 
 if __name__ == "__main__":

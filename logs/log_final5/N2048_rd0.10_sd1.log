@@ -1,0 +1,378 @@
+Before CTE Training: train eu loss: 1.063186526298523, eval eu loss: 1.492782711982727
+Before CTE Training: train eu acc: 0.6669921875, eval eu acc: 0.560546875
+epoch   0 summary: dyn_dyn_cos_loss: 0.02338, dyn_sta_cos_loss: 0.00713, total_cos_loss : 0.00875, vocab_cro_loss : 4.49871, 
+train loss: 3.6501, train acc: 0.2124
+epoch   1 summary: dyn_dyn_cos_loss: 0.02245, dyn_sta_cos_loss: 0.00653, total_cos_loss : 0.00812, vocab_cro_loss : 3.64979, 
+epoch   2 summary: dyn_dyn_cos_loss: 0.02086, dyn_sta_cos_loss: 0.00576, total_cos_loss : 0.00727, vocab_cro_loss : 2.86649, 
+epoch   3 summary: dyn_dyn_cos_loss: 0.01880, dyn_sta_cos_loss: 0.00508, total_cos_loss : 0.00645, vocab_cro_loss : 2.37503, 
+epoch   4 summary: dyn_dyn_cos_loss: 0.01634, dyn_sta_cos_loss: 0.00442, total_cos_loss : 0.00561, vocab_cro_loss : 2.03332, 
+epoch   5 summary: dyn_dyn_cos_loss: 0.01390, dyn_sta_cos_loss: 0.00390, total_cos_loss : 0.00490, vocab_cro_loss : 1.85397, 
+epoch   6 summary: dyn_dyn_cos_loss: 0.01173, dyn_sta_cos_loss: 0.00345, total_cos_loss : 0.00427, vocab_cro_loss : 1.73911, 
+epoch   7 summary: dyn_dyn_cos_loss: 0.00991, dyn_sta_cos_loss: 0.00312, total_cos_loss : 0.00380, vocab_cro_loss : 1.63590, 
+epoch   8 summary: dyn_dyn_cos_loss: 0.00847, dyn_sta_cos_loss: 0.00287, total_cos_loss : 0.00343, vocab_cro_loss : 1.58382, 
+epoch   9 summary: dyn_dyn_cos_loss: 0.00718, dyn_sta_cos_loss: 0.00262, total_cos_loss : 0.00308, vocab_cro_loss : 1.51473, 
+epoch  10 summary: dyn_dyn_cos_loss: 0.00620, dyn_sta_cos_loss: 0.00240, total_cos_loss : 0.00278, vocab_cro_loss : 1.46192, 
+train loss: 1.4158, train acc: 0.6050
+epoch  11 summary: dyn_dyn_cos_loss: 0.00531, dyn_sta_cos_loss: 0.00231, total_cos_loss : 0.00261, vocab_cro_loss : 1.41576, 
+epoch  12 summary: dyn_dyn_cos_loss: 0.00466, dyn_sta_cos_loss: 0.00216, total_cos_loss : 0.00241, vocab_cro_loss : 1.37666, 
+epoch  13 summary: dyn_dyn_cos_loss: 0.00416, dyn_sta_cos_loss: 0.00206, total_cos_loss : 0.00227, vocab_cro_loss : 1.36894, 
+epoch  14 summary: dyn_dyn_cos_loss: 0.00378, dyn_sta_cos_loss: 0.00195, total_cos_loss : 0.00213, vocab_cro_loss : 1.35398, 
+epoch  15 summary: dyn_dyn_cos_loss: 0.00356, dyn_sta_cos_loss: 0.00189, total_cos_loss : 0.00206, vocab_cro_loss : 1.37001, 
+epoch  16 summary: dyn_dyn_cos_loss: 0.00327, dyn_sta_cos_loss: 0.00189, total_cos_loss : 0.00203, vocab_cro_loss : 1.36328, 
+epoch  17 summary: dyn_dyn_cos_loss: 0.00312, dyn_sta_cos_loss: 0.00183, total_cos_loss : 0.00196, vocab_cro_loss : 1.36655, 
+epoch  18 summary: dyn_dyn_cos_loss: 0.00300, dyn_sta_cos_loss: 0.00184, total_cos_loss : 0.00196, vocab_cro_loss : 1.34902, 
+epoch  19 summary: dyn_dyn_cos_loss: 0.00292, dyn_sta_cos_loss: 0.00179, total_cos_loss : 0.00190, vocab_cro_loss : 1.33186, 
+epoch  20 summary: dyn_dyn_cos_loss: 0.00286, dyn_sta_cos_loss: 0.00174, total_cos_loss : 0.00185, vocab_cro_loss : 1.32097, 
+train loss: 1.2959, train acc: 0.6104
+epoch  21 summary: dyn_dyn_cos_loss: 0.00281, dyn_sta_cos_loss: 0.00170, total_cos_loss : 0.00181, vocab_cro_loss : 1.29587, 
+epoch  22 summary: dyn_dyn_cos_loss: 0.00277, dyn_sta_cos_loss: 0.00170, total_cos_loss : 0.00181, vocab_cro_loss : 1.28581, 
+epoch  23 summary: dyn_dyn_cos_loss: 0.00272, dyn_sta_cos_loss: 0.00166, total_cos_loss : 0.00176, vocab_cro_loss : 1.27730, 
+epoch  24 summary: dyn_dyn_cos_loss: 0.00267, dyn_sta_cos_loss: 0.00170, total_cos_loss : 0.00179, vocab_cro_loss : 1.27618, 
+epoch  25 summary: dyn_dyn_cos_loss: 0.00265, dyn_sta_cos_loss: 0.00161, total_cos_loss : 0.00171, vocab_cro_loss : 1.26130, 
+epoch  26 summary: dyn_dyn_cos_loss: 0.00263, dyn_sta_cos_loss: 0.00159, total_cos_loss : 0.00169, vocab_cro_loss : 1.24907, 
+epoch  27 summary: dyn_dyn_cos_loss: 0.00263, dyn_sta_cos_loss: 0.00157, total_cos_loss : 0.00167, vocab_cro_loss : 1.22986, 
+epoch  28 summary: dyn_dyn_cos_loss: 0.00261, dyn_sta_cos_loss: 0.00158, total_cos_loss : 0.00168, vocab_cro_loss : 1.23218, 
+epoch  29 summary: dyn_dyn_cos_loss: 0.00257, dyn_sta_cos_loss: 0.00155, total_cos_loss : 0.00165, vocab_cro_loss : 1.22939, 
+epoch  30 summary: dyn_dyn_cos_loss: 0.00258, dyn_sta_cos_loss: 0.00151, total_cos_loss : 0.00162, vocab_cro_loss : 1.23453, 
+train loss: 1.2424, train acc: 0.6206
+epoch  31 summary: dyn_dyn_cos_loss: 0.00252, dyn_sta_cos_loss: 0.00152, total_cos_loss : 0.00162, vocab_cro_loss : 1.24230, 
+epoch  32 summary: dyn_dyn_cos_loss: 0.00250, dyn_sta_cos_loss: 0.00146, total_cos_loss : 0.00157, vocab_cro_loss : 1.23992, 
+epoch  33 summary: dyn_dyn_cos_loss: 0.00248, dyn_sta_cos_loss: 0.00146, total_cos_loss : 0.00157, vocab_cro_loss : 1.23805, 
+epoch  34 summary: dyn_dyn_cos_loss: 0.00246, dyn_sta_cos_loss: 0.00146, total_cos_loss : 0.00156, vocab_cro_loss : 1.24278, 
+epoch  35 summary: dyn_dyn_cos_loss: 0.00242, dyn_sta_cos_loss: 0.00147, total_cos_loss : 0.00156, vocab_cro_loss : 1.24118, 
+epoch  36 summary: dyn_dyn_cos_loss: 0.00236, dyn_sta_cos_loss: 0.00145, total_cos_loss : 0.00154, vocab_cro_loss : 1.23786, 
+epoch  37 summary: dyn_dyn_cos_loss: 0.00233, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00148, vocab_cro_loss : 1.23986, 
+epoch  38 summary: dyn_dyn_cos_loss: 0.00229, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00147, vocab_cro_loss : 1.24396, 
+epoch  39 summary: dyn_dyn_cos_loss: 0.00227, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00147, vocab_cro_loss : 1.25269, 
+epoch  40 summary: dyn_dyn_cos_loss: 0.00224, dyn_sta_cos_loss: 0.00140, total_cos_loss : 0.00149, vocab_cro_loss : 1.25292, 
+train loss: 1.2633, train acc: 0.6284
+epoch  41 summary: dyn_dyn_cos_loss: 0.00222, dyn_sta_cos_loss: 0.00139, total_cos_loss : 0.00147, vocab_cro_loss : 1.26320, 
+epoch  42 summary: dyn_dyn_cos_loss: 0.00221, dyn_sta_cos_loss: 0.00136, total_cos_loss : 0.00145, vocab_cro_loss : 1.25724, 
+epoch  43 summary: dyn_dyn_cos_loss: 0.00220, dyn_sta_cos_loss: 0.00136, total_cos_loss : 0.00144, vocab_cro_loss : 1.25781, 
+epoch  44 summary: dyn_dyn_cos_loss: 0.00220, dyn_sta_cos_loss: 0.00140, total_cos_loss : 0.00148, vocab_cro_loss : 1.26612, 
+epoch  45 summary: dyn_dyn_cos_loss: 0.00225, dyn_sta_cos_loss: 0.00137, total_cos_loss : 0.00146, vocab_cro_loss : 1.26749, 
+epoch  46 summary: dyn_dyn_cos_loss: 0.00223, dyn_sta_cos_loss: 0.00139, total_cos_loss : 0.00148, vocab_cro_loss : 1.26712, 
+epoch  47 summary: dyn_dyn_cos_loss: 0.00221, dyn_sta_cos_loss: 0.00140, total_cos_loss : 0.00148, vocab_cro_loss : 1.25497, 
+epoch  48 summary: dyn_dyn_cos_loss: 0.00220, dyn_sta_cos_loss: 0.00139, total_cos_loss : 0.00147, vocab_cro_loss : 1.25969, 
+epoch  49 summary: dyn_dyn_cos_loss: 0.00219, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00146, vocab_cro_loss : 1.25384, 
+epoch  50 summary: dyn_dyn_cos_loss: 0.00216, dyn_sta_cos_loss: 0.00140, total_cos_loss : 0.00148, vocab_cro_loss : 1.25792, 
+train loss: 1.2685, train acc: 0.6211
+epoch  51 summary: dyn_dyn_cos_loss: 0.00215, dyn_sta_cos_loss: 0.00137, total_cos_loss : 0.00145, vocab_cro_loss : 1.26839, 
+epoch  52 summary: dyn_dyn_cos_loss: 0.00214, dyn_sta_cos_loss: 0.00137, total_cos_loss : 0.00145, vocab_cro_loss : 1.27338, 
+epoch  53 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00135, total_cos_loss : 0.00143, vocab_cro_loss : 1.26613, 
+epoch  54 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00141, total_cos_loss : 0.00148, vocab_cro_loss : 1.27052, 
+epoch  55 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00140, total_cos_loss : 0.00147, vocab_cro_loss : 1.26695, 
+epoch  56 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00142, total_cos_loss : 0.00149, vocab_cro_loss : 1.26227, 
+epoch  57 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00142, total_cos_loss : 0.00149, vocab_cro_loss : 1.26432, 
+epoch  58 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00142, total_cos_loss : 0.00148, vocab_cro_loss : 1.26554, 
+epoch  59 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00145, vocab_cro_loss : 1.24936, 
+epoch  60 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00137, total_cos_loss : 0.00144, vocab_cro_loss : 1.24307, 
+train loss: 1.2462, train acc: 0.6255
+epoch  61 summary: dyn_dyn_cos_loss: 0.00202, dyn_sta_cos_loss: 0.00134, total_cos_loss : 0.00141, vocab_cro_loss : 1.24610, 
+epoch  62 summary: dyn_dyn_cos_loss: 0.00200, dyn_sta_cos_loss: 0.00134, total_cos_loss : 0.00141, vocab_cro_loss : 1.25529, 
+epoch  63 summary: dyn_dyn_cos_loss: 0.00199, dyn_sta_cos_loss: 0.00132, total_cos_loss : 0.00139, vocab_cro_loss : 1.24621, 
+epoch  64 summary: dyn_dyn_cos_loss: 0.00198, dyn_sta_cos_loss: 0.00136, total_cos_loss : 0.00142, vocab_cro_loss : 1.25383, 
+epoch  65 summary: dyn_dyn_cos_loss: 0.00202, dyn_sta_cos_loss: 0.00135, total_cos_loss : 0.00142, vocab_cro_loss : 1.24738, 
+epoch  66 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00145, vocab_cro_loss : 1.25226, 
+epoch  67 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00140, total_cos_loss : 0.00147, vocab_cro_loss : 1.24745, 
+epoch  68 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00137, total_cos_loss : 0.00144, vocab_cro_loss : 1.26744, 
+epoch  69 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00134, total_cos_loss : 0.00142, vocab_cro_loss : 1.27771, 
+epoch  70 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00136, total_cos_loss : 0.00143, vocab_cro_loss : 1.26136, 
+train loss: 1.2556, train acc: 0.6323
+epoch  71 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00133, total_cos_loss : 0.00141, vocab_cro_loss : 1.25555, 
+epoch  72 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00137, total_cos_loss : 0.00144, vocab_cro_loss : 1.26297, 
+epoch  73 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00136, total_cos_loss : 0.00144, vocab_cro_loss : 1.24728, 
+epoch  74 summary: dyn_dyn_cos_loss: 0.00213, dyn_sta_cos_loss: 0.00135, total_cos_loss : 0.00143, vocab_cro_loss : 1.24741, 
+epoch  75 summary: dyn_dyn_cos_loss: 0.00221, dyn_sta_cos_loss: 0.00133, total_cos_loss : 0.00141, vocab_cro_loss : 1.24383, 
+epoch  76 summary: dyn_dyn_cos_loss: 0.00221, dyn_sta_cos_loss: 0.00131, total_cos_loss : 0.00140, vocab_cro_loss : 1.23513, 
+epoch  77 summary: dyn_dyn_cos_loss: 0.00218, dyn_sta_cos_loss: 0.00130, total_cos_loss : 0.00139, vocab_cro_loss : 1.23290, 
+epoch  78 summary: dyn_dyn_cos_loss: 0.00216, dyn_sta_cos_loss: 0.00128, total_cos_loss : 0.00137, vocab_cro_loss : 1.23391, 
+epoch  79 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00130, total_cos_loss : 0.00138, vocab_cro_loss : 1.23482, 
+epoch  80 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00131, total_cos_loss : 0.00139, vocab_cro_loss : 1.23735, 
+train loss: 1.2470, train acc: 0.6299
+epoch  81 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00132, total_cos_loss : 0.00140, vocab_cro_loss : 1.24690, 
+epoch  82 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00135, total_cos_loss : 0.00143, vocab_cro_loss : 1.24714, 
+epoch  83 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00139, total_cos_loss : 0.00146, vocab_cro_loss : 1.25404, 
+epoch  84 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00134, total_cos_loss : 0.00141, vocab_cro_loss : 1.23987, 
+epoch  85 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00129, total_cos_loss : 0.00137, vocab_cro_loss : 1.22424, 
+epoch  86 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00129, total_cos_loss : 0.00137, vocab_cro_loss : 1.24083, 
+epoch  87 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00130, total_cos_loss : 0.00138, vocab_cro_loss : 1.24038, 
+epoch  88 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00135, total_cos_loss : 0.00142, vocab_cro_loss : 1.24127, 
+epoch  89 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00130, total_cos_loss : 0.00138, vocab_cro_loss : 1.23878, 
+epoch  90 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00128, total_cos_loss : 0.00137, vocab_cro_loss : 1.23016, 
+train loss: 1.2271, train acc: 0.6284
+epoch  91 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00127, total_cos_loss : 0.00135, vocab_cro_loss : 1.22704, 
+epoch  92 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00128, total_cos_loss : 0.00136, vocab_cro_loss : 1.22872, 
+epoch  93 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00129, total_cos_loss : 0.00137, vocab_cro_loss : 1.22606, 
+epoch  94 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00126, total_cos_loss : 0.00134, vocab_cro_loss : 1.22871, 
+epoch  95 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00128, total_cos_loss : 0.00136, vocab_cro_loss : 1.21032, 
+epoch  96 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00126, total_cos_loss : 0.00134, vocab_cro_loss : 1.21764, 
+epoch  97 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00126, total_cos_loss : 0.00134, vocab_cro_loss : 1.21379, 
+epoch  98 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00128, total_cos_loss : 0.00136, vocab_cro_loss : 1.20592, 
+epoch  99 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00129, total_cos_loss : 0.00136, vocab_cro_loss : 1.22689, 
+train loss: 1.2171, train acc: 0.6338
+all                         173310.106ms
+all_epoch                   167993.737ms
+all_preparation               5316.303ms
+all_preparation_2             5314.015ms
+all_preparation_3                2.233ms
+epoch                         1511.887ms
+epoch_pos_train                  5.859ms
+epoch_preparation               22.773ms
+epoch_train                   1466.066ms
+epoch_valid                     13.026ms
+----------------------------------------
+all                         173310.106ms
+  all_epoch             96.93%
+  all_preparation        3.07%
+all_preparation               5316.303ms
+  all_preparation_2     99.96%
+  all_preparation_3      0.04%
+epoch                       151188.681ms
+  epoch_train           96.97%
+  epoch_preparation      1.51%
+  epoch_valid            0.86%
+  epoch_pos_train        0.39%
+epoch   0 summary: dyn_dyn_cos_loss: 0.02085, dyn_sta_cos_loss: 0.00689, total_cos_loss : 0.00829, 
+valid loss: 3.6770, valid acc: 0.1504
+epoch   1 summary: dyn_dyn_cos_loss: 0.01585, dyn_sta_cos_loss: 0.00535, total_cos_loss : 0.00640, 
+epoch   2 summary: dyn_dyn_cos_loss: 0.01185, dyn_sta_cos_loss: 0.00422, total_cos_loss : 0.00498, 
+epoch   3 summary: dyn_dyn_cos_loss: 0.00882, dyn_sta_cos_loss: 0.00339, total_cos_loss : 0.00393, 
+epoch   4 summary: dyn_dyn_cos_loss: 0.00683, dyn_sta_cos_loss: 0.00281, total_cos_loss : 0.00321, 
+epoch   5 summary: dyn_dyn_cos_loss: 0.00564, dyn_sta_cos_loss: 0.00243, total_cos_loss : 0.00275, 
+epoch   6 summary: dyn_dyn_cos_loss: 0.00474, dyn_sta_cos_loss: 0.00215, total_cos_loss : 0.00241, 
+epoch   7 summary: dyn_dyn_cos_loss: 0.00395, dyn_sta_cos_loss: 0.00191, total_cos_loss : 0.00212, 
+epoch   8 summary: dyn_dyn_cos_loss: 0.00346, dyn_sta_cos_loss: 0.00175, total_cos_loss : 0.00192, 
+epoch   9 summary: dyn_dyn_cos_loss: 0.00303, dyn_sta_cos_loss: 0.00162, total_cos_loss : 0.00176, 
+epoch  10 summary: dyn_dyn_cos_loss: 0.00275, dyn_sta_cos_loss: 0.00152, total_cos_loss : 0.00164, 
+valid loss: 1.8927, valid acc: 0.5156
+epoch  11 summary: dyn_dyn_cos_loss: 0.00254, dyn_sta_cos_loss: 0.00144, total_cos_loss : 0.00155, 
+epoch  12 summary: dyn_dyn_cos_loss: 0.00239, dyn_sta_cos_loss: 0.00138, total_cos_loss : 0.00148, 
+epoch  13 summary: dyn_dyn_cos_loss: 0.00226, dyn_sta_cos_loss: 0.00133, total_cos_loss : 0.00143, 
+epoch  14 summary: dyn_dyn_cos_loss: 0.00220, dyn_sta_cos_loss: 0.00129, total_cos_loss : 0.00138, 
+epoch  15 summary: dyn_dyn_cos_loss: 0.00222, dyn_sta_cos_loss: 0.00126, total_cos_loss : 0.00136, 
+epoch  16 summary: dyn_dyn_cos_loss: 0.00217, dyn_sta_cos_loss: 0.00124, total_cos_loss : 0.00133, 
+epoch  17 summary: dyn_dyn_cos_loss: 0.00214, dyn_sta_cos_loss: 0.00122, total_cos_loss : 0.00131, 
+epoch  18 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00120, total_cos_loss : 0.00129, 
+epoch  19 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00119, total_cos_loss : 0.00128, 
+epoch  20 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00118, total_cos_loss : 0.00127, 
+valid loss: 1.7756, valid acc: 0.5254
+epoch  21 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00117, total_cos_loss : 0.00126, 
+epoch  22 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00116, total_cos_loss : 0.00125, 
+epoch  23 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00116, total_cos_loss : 0.00125, 
+epoch  24 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00116, total_cos_loss : 0.00125, 
+epoch  25 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00115, total_cos_loss : 0.00124, 
+epoch  26 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00115, total_cos_loss : 0.00124, 
+epoch  27 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00115, total_cos_loss : 0.00124, 
+epoch  28 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00123, 
+epoch  29 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00123, 
+epoch  30 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00124, 
+valid loss: 1.7490, valid acc: 0.5332
+epoch  31 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00123, 
+epoch  32 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00123, 
+epoch  33 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00123, 
+epoch  34 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00114, total_cos_loss : 0.00123, 
+epoch  35 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00123, 
+epoch  36 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  37 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  38 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  39 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  40 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+valid loss: 1.7409, valid acc: 0.5391
+epoch  41 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  42 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  43 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  44 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  45 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00123, 
+epoch  46 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00123, 
+epoch  47 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00123, 
+epoch  48 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  49 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  50 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+valid loss: 1.7364, valid acc: 0.5371
+epoch  51 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  52 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  53 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  54 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  55 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  56 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  57 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  58 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  59 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  60 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+valid loss: 1.7326, valid acc: 0.5391
+epoch  61 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00113, total_cos_loss : 0.00122, 
+epoch  62 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  63 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  64 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  65 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  66 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  67 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  68 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  69 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  70 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+valid loss: 1.7271, valid acc: 0.5371
+epoch  71 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  72 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  73 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  74 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  75 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  76 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  77 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  78 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  79 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  80 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+valid loss: 1.7323, valid acc: 0.5352
+epoch  81 summary: dyn_dyn_cos_loss: 0.00202, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  82 summary: dyn_dyn_cos_loss: 0.00202, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  83 summary: dyn_dyn_cos_loss: 0.00202, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  84 summary: dyn_dyn_cos_loss: 0.00201, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  85 summary: dyn_dyn_cos_loss: 0.00201, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  86 summary: dyn_dyn_cos_loss: 0.00201, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  87 summary: dyn_dyn_cos_loss: 0.00201, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  88 summary: dyn_dyn_cos_loss: 0.00201, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  89 summary: dyn_dyn_cos_loss: 0.00201, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  90 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+valid loss: 1.7317, valid acc: 0.5312
+epoch  91 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  92 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  93 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  94 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  95 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  96 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch  97 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  98 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch  99 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+valid loss: 1.7197, valid acc: 0.5410
+epoch 100 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+valid loss: 1.7190, valid acc: 0.5410
+epoch 101 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 102 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 103 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 104 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 105 summary: dyn_dyn_cos_loss: 0.00213, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch 106 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch 107 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch 108 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch 109 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch 110 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+valid loss: 1.7199, valid acc: 0.5391
+epoch 111 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00122, 
+epoch 112 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 113 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 114 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 115 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 116 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 117 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 118 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 119 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 120 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+valid loss: 1.7083, valid acc: 0.5391
+epoch 121 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 122 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 123 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 124 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 125 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 126 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 127 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 128 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 129 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 130 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+valid loss: 1.7038, valid acc: 0.5371
+epoch 131 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 132 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 133 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 134 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 135 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 136 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 137 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 138 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 139 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00112, total_cos_loss : 0.00121, 
+epoch 140 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+valid loss: 1.7047, valid acc: 0.5312
+epoch 141 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 142 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 143 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 144 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 145 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 146 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 147 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 148 summary: dyn_dyn_cos_loss: 0.00202, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 149 summary: dyn_dyn_cos_loss: 0.00203, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 150 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+valid loss: 1.6986, valid acc: 0.5430
+epoch 151 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 152 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 153 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 154 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 155 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 156 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 157 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 158 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 159 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 160 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+valid loss: 1.7137, valid acc: 0.5410
+epoch 161 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 162 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 163 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 164 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 165 summary: dyn_dyn_cos_loss: 0.00212, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 166 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 167 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 168 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 169 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 170 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+valid loss: 1.7205, valid acc: 0.5391
+epoch 171 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 172 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 173 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 174 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 175 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 176 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 177 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 178 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 179 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 180 summary: dyn_dyn_cos_loss: 0.00208, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+valid loss: 1.7179, valid acc: 0.5391
+epoch 181 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 182 summary: dyn_dyn_cos_loss: 0.00207, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 183 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 184 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 185 summary: dyn_dyn_cos_loss: 0.00206, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 186 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 187 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 188 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 189 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 190 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+valid loss: 1.7053, valid acc: 0.5449
+epoch 191 summary: dyn_dyn_cos_loss: 0.00205, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 192 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 193 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00120, 
+epoch 194 summary: dyn_dyn_cos_loss: 0.00204, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00120, 
+epoch 195 summary: dyn_dyn_cos_loss: 0.00211, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 196 summary: dyn_dyn_cos_loss: 0.00210, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 197 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 198 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+epoch 199 summary: dyn_dyn_cos_loss: 0.00209, dyn_sta_cos_loss: 0.00111, total_cos_loss : 0.00121, 
+all                          73917.229ms
+all_epoch                    73908.012ms
+all_preparation                  9.184ms
+all_preparation_2                7.085ms
+all_preparation_3                2.074ms
+epoch                          290.362ms
+epoch_pos_train                  5.333ms
+epoch_preparation                0.400ms
+epoch_train                    279.584ms
+epoch_valid                      2.873ms
+----------------------------------------
+all                          73917.229ms
+  all_epoch             99.99%
+  all_preparation        0.01%
+all_preparation                  9.184ms
+  all_preparation_2     77.14%
+  all_preparation_3     22.58%
+epoch                        58072.408ms
+  epoch_train           96.29%
+  epoch_pos_train        1.84%
+  epoch_valid            0.99%
+  epoch_preparation      0.14%

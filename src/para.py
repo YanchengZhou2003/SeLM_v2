@@ -34,6 +34,8 @@ parser.add_argument("--T_valid"           , type=int,   default=128,   help="")
 parser.add_argument("--N_dynbr"           , type=int,   default=325,   help="") # 65, 130, 195, 260, 325, 390, 455
 parser.add_argument("--N_stnbr"           , type=int,   default=65,    help="") # 1 , 2  , 3  , 4  , 5  , 6  , 7
 
+parser.add_argument("--ratio_dyn"         , type=float, default=0.1,    help="")
+parser.add_argument("--step_dyn"          , type=int,   default=1,     help="")
 
 parser.add_argument("--h"                 , type=int,   default=18 ,   help="")
 parser.add_argument("--tp"                , type=int,   default=16 ,   help="")
@@ -49,6 +51,8 @@ parser.add_argument("--temperature"       , type=float, default=10. , help="")
 parser.add_argument("--train_converge"    , type=int,   default=50 ,   help="")
 parser.add_argument("--valid_converge"    , type=int,   default=50 ,   help="")
 
+parser.add_argument("--train_save_path"    , type=str,   default="./ckpt/cte/_tmp.pt", help="")
+
 parser.add_argument("--train_graph_reset" , type=int,   default=50,    help="")
 parser.add_argument("--vocab_graph_reset" , type=int,   default=50,    help="")
 parser.add_argument("--valid_graph_reset" , type=int,   default=50,    help="")
@@ -59,7 +63,7 @@ parser.add_argument("--valid_only"        , type=int,   default=0 ,    help="")
 parser.add_argument("--val_interval"      , type=int,   default=10 ,   help="")
 parser.add_argument("--vis_interval"      , type=int,   default=100 ,  help="")
 
-parser.add_argument("--vis_path"          , type=str,   default='./vis_new/_tmp' , help="")
+parser.add_argument("--vis_path"          , type=str,   default='./vis/tmp' , help="")
 parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
 parser.add_argument("--use_filter"        , type=int,   default=0    , help="")
 
@@ -138,10 +142,14 @@ valid4sid         = [list(range(sid, num_valid_blocks, num_devices)) for sid in 
 
 
 # 超参数：训练相关
-loss_strategy: Dict = {
-    'train_converge'  : args.train_converge,
-    'valid_converge'  : args.valid_converge,
-}
+train_converge    = args.train_converge    # 50
+valid_converge    = args.valid_converge    # 50
+
+ratio_dyn         = args.ratio_dyn         # 0.1
+ratio_sta         = 1.0 - ratio_dyn
+
+step_dyn          = args.step_dyn          # 1
+
 train_epoch_num = args.train_epoch_num # 5
 valid_epoch_num = args.valid_epoch_num # 5
 
@@ -213,10 +221,8 @@ cte_path         = './ckpt/cte'
 cache_path       = './data/'
 train_cache_path = './ckpt/cte'
 vis_path         = args.vis_path
-train_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}.pt"
-train_new_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch" + "{}.pt"
+train_save_path  = args.train_save_path
 
-valid_save_path  = f"./ckpt/cte/locations_h{h}_tp{tp}_N_train{N_train}_N_vocab{N_vocab}_train_epoch{train_epoch_num}_N_valid{N_valid}_valid_epoch{valid_epoch_num}.pt"
 
 os.makedirs(vis_path, exist_ok=True)
 
