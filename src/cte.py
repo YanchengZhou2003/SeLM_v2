@@ -16,7 +16,6 @@ from tqdm import tqdm
 
 from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
-from src.loss import *
 from src.para import *
 from src.sampler import *
 from src.utils import *
@@ -76,6 +75,8 @@ class CritiGraph(torch.nn.Module):
         # (B*T1, H, 1, D) ^ (B*T1, H, K, D) -> (B*T1, H*K, D)
         loc = torch.cat((result, ori_int.unsqueeze(1), -result), dim=1) # (B*T1, H*K + 1 + H*K, D)
         return loc
+            
+            
               
     def converge_mask(self, size0: int, size1: int, dev_num=0):
         device  = devices[dev_num] if dev_num >= 0 else main_device
@@ -142,6 +143,8 @@ class CritiGraph(torch.nn.Module):
         s = exp.float() / self.h
         return sg * (1 - s)
     
+    
+    
     def loom_dyn(
         self, 
         cnc_loc: torch.Tensor,   # (T_train, N_C    , dim_ct)
@@ -196,10 +199,11 @@ class CritiGraph(torch.nn.Module):
 
         ### step 3: 计算 loss
         loss_dyn_dyn = (
-            torch.square(eu_val[:, :N_dynbr, :, :] - ct_val[:, :N_dynbr, :, :]) 
-            * torch.abs(eu_val[:, :N_dynbr, :, :])
+            torch.square(eu_val[:, 0:N_dynbr, :, :] - ct_val[:, :N_dynbr, :, :]) 
+            * torch.abs(eu_val[:, :N_dynbr, :, :]) # (T_train, N_dynbr + N_stnbr, N_C, dim_ct)
         ).sum(dim=1)  # (T_train, N_C, dim_ct)
         # loss_dyn_sta = loss[:, N_dynbr:, :, :].sum(dim=1) / N_stnbr  # (T_train, N_C, dim_ct) 
+        
         loss_dyn_sta = (
             (F.log_softmax(eu_val[:, N_dynbr:, :, :] * 20, dim=1) - F.log_softmax(ct_val[:, N_dynbr:, :, :] * 20, dim=1)) 
             * F.softmax(eu_val[:, N_dynbr:, :, :] * 20, dim=1)
@@ -208,7 +212,7 @@ class CritiGraph(torch.nn.Module):
                                           
         return loss_dyn_dyn, loss_dyn_sta
     
-    def loom_voc(
+    def loom_sta(
         self, 
         cur_tar: torch.Tensor,   # (T_vtnbr, )
         pos_loc: torch.Tensor,   # (T_vtnbr, dim_ct)
@@ -389,7 +393,7 @@ class CritiGraph(torch.nn.Module):
     #     return loss_dyn_dyn
     '''
     
-    def train_train_blocks(self, sid: int):
+    def train_dyn_blocks(self, sid: int):
         device = devices[sid]
         
         for train_block_id in train4sid[sid]:
@@ -447,6 +451,7 @@ class CritiGraph(torch.nn.Module):
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
                 comp_ready_event.record(defa_streams[sid])
             
+            ### step.3 将结果写回主存
             with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
                 data_streams[sid].wait_event(comp_ready_event)
                 
@@ -455,7 +460,7 @@ class CritiGraph(torch.nn.Module):
                 self.dyn_dyn_cos_loss   [train_slice] = dyn_dyn_cos_loss.to(main_device, non_blocking=True)
                 self.dyn_sta_cos_loss   [train_slice] = dyn_sta_cos_loss.to(main_device, non_blocking=True)
 
-    def train_vocab_blocks(self, sid: int):
+    def train_sta_blocks(self, sid: int):
         device = devices[sid]
         
         for vtnbr_block_id in vtnbr4sid[sid]:
@@ -481,7 +486,7 @@ class CritiGraph(torch.nn.Module):
                     _pos_emb.to(device, non_blocking=True),
                 )
 
-                loss  = self.loom_voc(
+                loss  = self.loom_sta(
                     cur_tar,
                     pos_loc, pos_emb,
                     sid
@@ -503,7 +508,7 @@ class CritiGraph(torch.nn.Module):
             self.new_vocab_locations  = selected_locs
             self.vocab_cro_loss       = vocab_loss
                 
-    def train_valid_blocks(self, sid: int):
+    def valid_dyn_blocks(self, sid: int):
         device = devices[sid]
 
         for valid_block_id in valid4sid[sid]:
@@ -575,7 +580,7 @@ class CritiGraph(torch.nn.Module):
             
             ### step 1: 考虑 train_blocks
             if cur_epoch % step_dyn == 0:
-                self.train_train_blocks(sid)
+                self.train_dyn_blocks(sid)
             else:
                 self.dyn_dyn_cos_loss.zero_()
                 self.dyn_sta_cos_loss.zero_()
@@ -587,18 +592,18 @@ class CritiGraph(torch.nn.Module):
             
             
             ### step 2: 考虑 vocab_blocks
-            self.train_vocab_blocks(sid)
+            self.train_sta_blocks(sid)
             
             self.epoch_barrier.wait()
             self._synchronize_all_streams()
 
     @thread_guard
-    def test_time_train_epoch(self, sid: int):
+    def valid_epoch(self, sid: int):
         for cur_epoch in range(valid_epoch_num):
             self.epoch_barrier.wait()
             self._synchronize_all_streams()
             
-            self.train_valid_blocks(sid)
+            self.valid_dyn_blocks(sid)
             
             self.epoch_barrier.wait()
             self._synchronize_all_streams()
@@ -715,24 +720,13 @@ class CritiGraph(torch.nn.Module):
             ### step 3.5: 验证
             mark(ST, "epoch_valid")
             if cur_epoch % val_interval == 0 or cur_epoch == train_epoch_num - 1: 
-                self.validate(cur_epoch, "train")
+                self.print_cross_entropy_loss(cur_epoch, "train")
             mark(ED, "epoch_valid", father="epoch")
             mark(ED, "epoch")
             
             ### step 3.6: 可视化
             if cur_epoch % vis_interval == 0 or cur_epoch == train_epoch_num - 1:
                 self.visualize(cur_epoch, "train")
-            # try:
-            #     torch.save( 
-            #         {
-            #             "train_locations"     : self.train_locations.cpu(),
-            #             "train_dyn_graph": self.train_sampler.dyn_graph.cpu(),
-            #             "vocab_locations"     : self.vocab_locations.cpu(),
-            #         },
-            #         train_new_save_path.format(cur_epoch)
-            #     )
-            # except Exception as e:
-            #     print(f"Warning: failed to save checkpoint at epoch {cur_epoch}: {e}")
 
         
         for thread in threads:
@@ -752,7 +746,7 @@ class CritiGraph(torch.nn.Module):
     
 
     @gettime(fmt='ms', pr=True)
-    def test_time_train_all(
+    def valid_all(
         self,
         train_emb : torch.Tensor, # (N_train, dim)
         valid_emb : torch.Tensor, # (N_train, dim)
@@ -791,7 +785,7 @@ class CritiGraph(torch.nn.Module):
         self.epoch_barrier  = threading.Barrier(num_devices + 1) # num_devices 个生产线程，num_devices 个消费线程，1 个主线程
         threads: List[threading.Thread] = []
         for i, _ in enumerate(devices):
-            thread = threading.Thread(target=self.test_time_train_epoch, args=(i,))
+            thread = threading.Thread(target=self.valid_epoch, args=(i,))
             thread.start()
             threads.append(thread)
         mark(ED, "all_preparation_3", father="all_preparation")
@@ -851,7 +845,7 @@ class CritiGraph(torch.nn.Module):
             ### step 3.5: 验证
             mark(ST, "epoch_valid")
             if cur_epoch % val_interval == 0 or cur_epoch == train_epoch_num - 1:
-                self.validate(cur_epoch, "valid")
+                self.print_cross_entropy_loss(cur_epoch, "valid")
             mark(ED, "epoch_valid", father="epoch")
             mark(ED, "epoch")
             
@@ -874,7 +868,11 @@ class CritiGraph(torch.nn.Module):
         mark(ED, "all_epoch", father="all")
         mark(ED, "all")
     
-    def validate(self, epoch: int, cur_type: str):
+    
+    
+    
+    
+    def print_cross_entropy_loss(self, epoch: int, cur_type: str):
         loss     = 0
         accuracy = 0
         

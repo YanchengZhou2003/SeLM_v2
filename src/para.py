@@ -41,7 +41,7 @@ parser.add_argument("--h"                 , type=int,   default=18 ,   help="")
 parser.add_argument("--tp"                , type=int,   default=16 ,   help="")
 parser.add_argument("--cur_tp"            , type=int,   default=2  ,   help="")
 parser.add_argument("--cur_portion"       , type=float, default=0.5 ,  help="")
-parser.add_argument("--division_fact"     , type=float, default=1.0 ,  help="")
+parser.add_argument("--c"                 , type=float, default=1.0 ,  help="")
 
 parser.add_argument("--train_epoch_num"   , type=int,   default=500,   help="")
 parser.add_argument("--valid_epoch_num"   , type=int,   default=500,   help="")
@@ -161,8 +161,8 @@ valid_graph_reset = args.valid_graph_reset # 50
 val_interval    = args.val_interval    # 10
 vis_interval    = args.vis_interval    # 100
 
-division_fact   = args.division_fact   # 1.0
-N_K             = int(h / division_fact)
+c               = args.c               # 1.0
+N_K             = int(h * c)
 N_C             = 2 * N_K * h + 1
 
 train_only      = args.train_only        # 0

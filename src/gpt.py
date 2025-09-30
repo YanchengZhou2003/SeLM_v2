@@ -206,6 +206,7 @@ class GPTLanguageModel(nn.Module):
 
 
 ################ ------------- GPT 训练与评估 ------------- ################
+'''
 def get_norm_distribution(model: GPTLanguageModel, iter: int):
     import matplotlib.ticker as ticker
     all_norms = []
@@ -257,7 +258,7 @@ def get_norm_distribution(model: GPTLanguageModel, iter: int):
     plt.savefig(f"gpt_logits_dist_iter_{iter}.png")
 
     model.train()
-
+'''
 
 def train_gpt(gpt_ckpt: str):
     model: GPTLanguageModel = GPTLanguageModel().to(main_device)
@@ -449,12 +450,13 @@ def train_cte(
     print(f"Before CTE Training: train eu acc: {train_acc}, eval eu acc: {valid_acc}")
 
     #### step 3.2: CTE 训练与测试
+
     if not valid_only:
         cte.train_all(
             train_emb, train_top, vocab_emb, train_y
         )
     if not train_only:
-        cte.test_time_train_all(
+        cte.valid_all(
             train_emb, valid_emb, valid_top, vocab_emb, valid_y,
         )
 
