@@ -426,8 +426,7 @@ class CritiGraph(torch.nn.Module):
                 for i, block in enumerate(self.splits)
         ]
         
-        self.match_eu()
-        exit(0)
+
         
         self.sampler    = Expander_Sampler(
             self.N_train, self.N_valid, self.N_dyn, self.N_sta, self.N_T,
@@ -464,7 +463,8 @@ class CritiGraph(torch.nn.Module):
         mark(ED, "all_preparation_2", father="all_preparation")
         
         
-
+        self.match_eu()
+        exit(0)
         
         ### step 3: 开启多线程
         mark(ST, "all_preparation_3")
@@ -773,6 +773,8 @@ class CritiGraph(torch.nn.Module):
     def match_eu(self):
             topk_losses = []
             real_losses = []
+            topk_labels = []
+            real_labels = []
             targets     = []
             
             for i, block in enumerate(self.splits):
@@ -815,22 +817,24 @@ class CritiGraph(torch.nn.Module):
                 real_loss   = F.cross_entropy(real_eu_val, cur_tar, reduction='none')
 
                 real_losses.append(real_loss.cpu()) # (T, )
+                topk_labels.append(topk_eu_val.argmax(dim=-1).cpu())
+                real_labels.append(real_eu_val.argmax(dim=-1).cpu())
             
             topk_losses = torch.cat(topk_losses, dim=0).numpy() # (N_valid, 256)
             real_losses = torch.cat(real_losses, dim=0).numpy() # (N_valid, )
             
             assert topk_losses.shape[0] == real_losses.shape[0] == self.N_valid
             
-            topk_label = topk_eu_val.argmax(dim=-1).cpu()  # (T, 256)
-            real_label = real_eu_val.argmax(dim=-1).cpu()  # (T,)
+            topk_labels = torch.cat(topk_labels, dim=0).numpy() # (N_valid, 256)
+            real_labels  = torch.cat(real_labels, dim=0).numpy()  # (N_valid, )
             targets    = torch.cat(targets, dim=0).numpy() # (N_valid,)
 
             # 保存
             result = {
                 "real_losses": real_losses,
                 "topk_losses": topk_losses,
-                "real_label": real_label.numpy(),
-                "topk_label": topk_label.numpy(),
+                "real_label": real_labels,
+                "topk_label": topk_labels,
                 "ground_truth_label": targets
             }
             
