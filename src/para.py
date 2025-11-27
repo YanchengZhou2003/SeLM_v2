@@ -7,13 +7,13 @@ import torch
 
 from src.utils import make_splits
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,3,4,5"
 main_device = torch.device('cuda:0')
-devices = [torch.device(f"cuda:{i}") for i in range(1, torch.cuda.device_count())]
+devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 num_devices = len(devices)
 
-defa_streams = [torch.cuda.default_stream(i) for i in range(1, torch.cuda.device_count())]
-data_streams = [torch.cuda.Stream(0) for _ in range(1, torch.cuda.device_count())]
+defa_streams = [torch.cuda.default_stream(i) for i in range(torch.cuda.device_count())]
+data_streams = [torch.cuda.Stream(0) for _ in range(torch.cuda.device_count())]
 
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
 ### 1. GPT 训练相关参数
@@ -26,7 +26,7 @@ parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
 parser.add_argument("--T_train"           , type=int,   default=128,   help="")
 
 parser.add_argument("--N_vocab"           , type=int,   default=65   , help="")
-parser.add_argument("--T_vtnbr"           , type=int,   default=256,   help="")
+parser.add_argument("--T_vocab"           , type=int,   default=65 ,   help="")
 
 parser.add_argument("--N_valid"           , type=int,   default=2048,  help="")
 parser.add_argument("--T_valid"           , type=int,   default=128,   help="")
@@ -115,8 +115,9 @@ use_filter        = args.use_filter        # 0
 N_train           = args.N_train           # 65536
 T_train           = args.T_train           # 256
 
-N_vocab           = args.N_vocab           # 8192
-T_vtnbr           = args.T_vtnbr           # 256
+N_vocab           = args.N_vocab           # 65
+# T_vtnbr           = args.T_vtnbr         # 256
+T_vocab           = args.T_vocab           # 65
 
 N_valid           = args.N_valid           # 8192
 T_valid           = args.T_valid           # 256
@@ -127,15 +128,18 @@ assert N_stnbr == N_vocab, f"N_stnbr 必须等于 N_vocab, 当前 {N_stnbr} != {
 N_nbr             = N_dynbr + N_stnbr      # 
 
 train_blocks      = make_splits(0, N_train, T_train) 
-vtnbr_blocks      = make_splits(0, N_train, T_vtnbr)
+# vtnbr_blocks      = make_splits(0, N_train, T_vtnbr)
+vocab_blocks      = make_splits(0, N_vocab, T_vocab)
 valid_blocks      = make_splits(0, N_valid, T_valid)
 
 num_train_blocks  = len(train_blocks)
-num_vtnbr_blocks  = len(vtnbr_blocks)
+# num_vtnbr_blocks  = len(vtnbr_blocks)
+num_vocab_blocks  = len(vocab_blocks)
 num_valid_blocks  = len(valid_blocks)
 
 train4sid         = [list(range(sid, num_train_blocks, num_devices)) for sid in range(num_devices)]
-vtnbr4sid         = [list(range(sid, num_vtnbr_blocks, num_devices)) for sid in range(num_devices)]
+# vtnbr4sid         = [list(range(sid, num_vtnbr_blocks, num_devices)) for sid in range(num_devices)]
+vocab4sid         = [list(range(sid, num_vocab_blocks, num_devices)) for sid in range(num_devices)]
 valid4sid         = [list(range(sid, num_valid_blocks, num_devices)) for sid in range(num_devices)]
 
 

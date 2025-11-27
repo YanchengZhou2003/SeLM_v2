@@ -1,0 +1,48 @@
+Before CTE Training: train eu loss: 1.057024359703064, eval eu loss: 1.492782711982727
+Before CTE Training: train eu acc: 0.66552734375, eval eu acc: 0.560546875
+epoch   0 summary: dyn_dyn_loss   : 0.24901, dyn_sta_loss   : 4.11159, tot_dyn_loss   : 3.72533, sta_sta_loss   : 0.57483, 
+train loss: 1.9996, train acc: 0.6211
+epoch   1 summary: dyn_dyn_loss   : 0.24150, dyn_sta_loss   : 3.63806, tot_dyn_loss   : 3.29840, sta_sta_loss   : 0.57483, 
+epoch   2 summary: dyn_dyn_loss   : 0.23044, dyn_sta_loss   : 3.22015, tot_dyn_loss   : 2.92118, sta_sta_loss   : 0.57483, 
+epoch   3 summary: dyn_dyn_loss   : 0.22551, dyn_sta_loss   : 2.86215, tot_dyn_loss   : 2.59849, sta_sta_loss   : 0.57483, 
+epoch   4 summary: dyn_dyn_loss   : 0.23059, dyn_sta_loss   : 2.56592, tot_dyn_loss   : 2.33239, sta_sta_loss   : 0.57483, 
+epoch   5 summary: dyn_dyn_loss   : 0.24602, dyn_sta_loss   : 2.33696, tot_dyn_loss   : 2.12786, sta_sta_loss   : 0.57483, 
+epoch   6 summary: dyn_dyn_loss   : 0.27027, dyn_sta_loss   : 2.14510, tot_dyn_loss   : 1.95762, sta_sta_loss   : 0.57483, 
+epoch   7 summary: dyn_dyn_loss   : 0.30042, dyn_sta_loss   : 1.99336, tot_dyn_loss   : 1.82406, sta_sta_loss   : 0.57483, 
+epoch   8 summary: dyn_dyn_loss   : 0.33410, dyn_sta_loss   : 1.87151, tot_dyn_loss   : 1.71777, sta_sta_loss   : 0.57483, 
+epoch   9 summary: dyn_dyn_loss   : 0.36848, dyn_sta_loss   : 1.79174, tot_dyn_loss   : 1.64941, sta_sta_loss   : 0.57483, 
+epoch  10 summary: dyn_dyn_loss   : 0.39809, dyn_sta_loss   : 1.73529, tot_dyn_loss   : 1.60157, sta_sta_loss   : 0.57483, 
+train loss: 0.0000, train acc: 1.0000
+epoch  11 summary: dyn_dyn_loss   : 0.42386, dyn_sta_loss   : 1.67185, tot_dyn_loss   : 1.54705, sta_sta_loss   : 0.57483, 
+epoch  12 summary: dyn_dyn_loss   : 0.44805, dyn_sta_loss   : 1.62942, tot_dyn_loss   : 1.51129, sta_sta_loss   : 0.57483, 
+epoch  13 summary: dyn_dyn_loss   : 0.46725, dyn_sta_loss   : 1.60610, tot_dyn_loss   : 1.49221, sta_sta_loss   : 0.57483, 
+epoch  14 summary: dyn_dyn_loss   : 0.48185, dyn_sta_loss   : 1.57517, tot_dyn_loss   : 1.46584, sta_sta_loss   : 0.57483, 
+epoch  15 summary: dyn_dyn_loss   : 0.49430, dyn_sta_loss   : 1.55255, tot_dyn_loss   : 1.44673, sta_sta_loss   : 0.57483, 
+epoch  16 summary: dyn_dyn_loss   : 0.50564, dyn_sta_loss   : 1.53935, tot_dyn_loss   : 1.43598, sta_sta_loss   : 0.57483, 
+epoch  17 summary: dyn_dyn_loss   : 0.51454, dyn_sta_loss   : 1.51388, tot_dyn_loss   : 1.41395, sta_sta_loss   : 0.57483, 
+epoch  18 summary: dyn_dyn_loss   : 0.52331, dyn_sta_loss   : 1.52926, tot_dyn_loss   : 1.42866, sta_sta_loss   : 0.57483, 
+epoch  19 summary: dyn_dyn_loss   : 0.52542, dyn_sta_loss   : 1.52655, tot_dyn_loss   : 1.42644, sta_sta_loss   : 0.57483, 
+Traceback (most recent call last):
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 487, in <module>
+    train_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+    return func(*args, **kwargs)
+  File "/data3/gc/SeLM_v2/src/gpt.py", line 455, in train_cte
+    cte.train_all(
+  File "/data3/gc/SeLM_v2/src/gettime.py", line 118, in wrapper
+    return fn(*args, **kwargs)
+  File "/data3/gc/SeLM_v2/src/cte.py", line 863, in train_all
+    self.epoch_barrier.wait()          # 第二阶段：train_vocab
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/threading.py", line 668, in wait
+    self._wait(timeout)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/threading.py", line 703, in _wait
+    if not self._cond.wait_for(lambda : self._state != 0, timeout):
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/threading.py", line 355, in wait_for
+    self.wait(waittime)
+  File "/data/gc/anaconda3/envs/lm/lib/python3.10/threading.py", line 320, in wait
+    waiter.acquire()
+KeyboardInterrupt

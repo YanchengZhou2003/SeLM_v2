@@ -28,15 +28,20 @@ class TrainSampler(BaseSample):
     ):
         super().__init__()
         
-        expander_graph: List[List[int]] = []
-        
-        _G = ig.Graph.K_Regular(n=N_train, k=N_dynbr, directed=False, multiple=False)
-        for node in range(N_train):
-            neighbors = list(_G.neighbors(node))
-            expander_graph.append(neighbors)
+        if N_dynbr < N_train:
+            expander_graph: List[List[int]] = []
             
-        self.dyn_graph = torch.tensor(expander_graph, dtype=torch.long, device=main_device)        # (N_train, N_dynbr)
-        self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_train, 1) # (N_train, N_stnbr)
+            _G = ig.Graph.K_Regular(n=N_train, k=N_dynbr, directed=False, multiple=False)
+            for node in range(N_train):
+                neighbors = list(_G.neighbors(node))
+                expander_graph.append(neighbors)
+                
+            self.dyn_graph = torch.tensor(expander_graph, dtype=torch.long, device=main_device)        # (N_train, N_dynbr)
+        elif N_dynbr == N_train:
+            self.dyn_graph = torch.arange(N_train, device=main_device).unsqueeze(0).repeat(N_train, 1) # (N_train, N_train)
+        else:
+            raise ValueError(f"N_dynbr ({N_dynbr}) cannot be larger than N_train ({N_train})")
+        self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_train, 1)     # (N_train, N_stnbr)
         
     def get_connection(self, block: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.dyn_graph[block[0]:block[1]], self.sta_graph[block[0]:block[1]]  # (T_train, N_dynbr), (T_train, N_stnbr) 
@@ -91,13 +96,13 @@ class ValidSampler(BaseSample):
 
         self.train_dyn_graph = train_dyn_graph.to(main_device)
         self.dyn_graph = train_dyn_graph[random_indices] # (N_valid, N_dynbr)
-        self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_valid, 1) # (N_valid, N_stnbr)
+        self.sta_graph = torch.arange   (N_vocab, device=main_device).unsqueeze(0).repeat(N_valid, 1) # (N_valid, N_stnbr)
 
     def get_connection(self, block: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.dyn_graph[block[0]:block[1]], self.sta_graph[block[0]:block[1]]
 
     def reset_indices(self):
-        random_indices = torch.randint(0, N_train, (N_valid,), device=main_device) # (N_valid,)
+        random_indices = torch.randint  (0, N_train, (N_valid,), device=main_device) # (N_valid,)
         self.dyn_graph = self.train_dyn_graph[random_indices] # (N_valid, N_dynbr)
 
 

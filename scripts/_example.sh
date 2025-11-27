@@ -1,22 +1,22 @@
 python -m src.gpt  \
-    --N_train 8192  --T_train 128  \
-    --N_vocab 65    --T_vtnbr 256  \
-    --N_valid 8192  --T_valid 128  \
-    --N_dynbr 256   --N_stnbr 65   \
-    --ratio_dyn 0.5 --step_dyn 3 \
-    --h 18 --tp 4 --c 1.0 --cur_tp 1 --cur_portion 1.0  \
-    --train_epoch_num 200 --valid_epoch_num 200 \
+    --N_train 16384  --T_train 16  \
+    --N_vocab 65    --T_vocab 65  \
+    --N_valid 512   --T_valid 16  \
+    --N_dynbr 16384  --N_stnbr 65   \
+    --ratio_dyn 0.5 --step_dyn 1 \
+    --h 16 --tp 10 --c 1.0 --cur_tp 1 --cur_portion 0.75  \
+    --train_epoch_num 5 --valid_epoch_num 5 \
     --train_converge 0 --valid_converge 0 \
-    --train_graph_reset 20 --valid_graph_reset 20 \
+    --train_graph_reset 25 --valid_graph_reset 25 \
     --train_only 0 --valid_only 0 \
-    --val_interval 10 --vis_interval 50 \
+    --val_interval 1 --vis_interval 1 \
     --use_eu_norm 0 --temperature 10.0 \
     --vis_path ./vis/example/ \
     --use_filter 0 \
-    --train_save_path ./ckpt/cte/example.pt \
-    > ./logs/example.log
+    --train_save_path ./ckpt/cte/example.pt
 
-# 参数说明：
+### >>> 参数说明 <<< ###
+# python -m src.gpt: 将 gpt.py 视为 src 的一个模块（m: module）运行
 # N_train: 训练集大小；T_train: 训练集分块大小
 # N_vocab: 词表大小；  T_vtnbr (T_vocabulary_train_neighbor)： static token 看向 dynamic token 时的分块大小
 # N_dynbr (N_dynamic neighbor)：每个 dynamic token 可见的 dynamic 邻居数量
@@ -34,5 +34,5 @@ python -m src.gpt  \
 # temperature: 顾名思义
 # vis_path: 可视化保存的路径
 # train_save_path: cte 训练好后的保存路径
-# > ./logs/example: 程序输出到的路径
+# > ./logs/example/example.log: 程序输出到的路径
 

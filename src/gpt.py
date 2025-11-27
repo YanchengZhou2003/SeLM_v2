@@ -423,10 +423,10 @@ def train_cte(
     vocab_emb   = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
     train_emb   = train_cache['emb']                                               # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
-    train_top   = train_cache['rk']
+    # train_top   = train_cache['rk']
     valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory
     valid_y     = valid_cache['y']                                                 # (N_valid, ),       pinned memory
-    valid_top   = valid_cache['rk']
+    # valid_top   = valid_cache['rk']
     
     ### step 2: 初始化 GPT 和 CTE
     emb_size    = N_train + N_vocab + N_valid
@@ -453,11 +453,11 @@ def train_cte(
 
     if not valid_only:
         cte.train_all(
-            train_emb, train_top, vocab_emb, train_y
+            train_emb, vocab_emb, train_y
         )
     if not train_only:
         cte.valid_all(
-            train_emb, valid_emb, valid_top, vocab_emb, valid_y,
+            train_emb, valid_emb, vocab_emb, valid_y,
         )
 
 
@@ -479,7 +479,7 @@ if __name__ == "__main__":
     # get_cte_train_and_test(gpt_ckpt, "gpt65_normed_b128_iters_3999_l{}_{}_cache.pth")
     if not use_filter:
         train_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_train_cache.pth"
-        valid_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_valid_cache_queried_l{}.pth"
+        valid_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_val_cache.pth"
     else:
         train_cache_ckpt = "65_normed_b256_iters_3999_l{}_train_new_cache_onlylast_onlygood_filtered.pth"
         valid_cache_ckpt = "65_normed_b256_iters_3999_l{}_query_vs_train{}_filtered.pth"
