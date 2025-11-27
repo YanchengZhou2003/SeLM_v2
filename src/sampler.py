@@ -25,20 +25,25 @@ import networkx as nx
 class TrainSampler(BaseSample):
     def __init__(
         self, 
+        train_top: torch.Tensor # (N_train, N_top)
     ):
         super().__init__()
+        self.train_top = train_top.to(main_device)
         
-        if N_dynbr < N_train:
+        if N_dynbr <= N_train:
+            N_nei = N_dynbr - N_top
             expander_graph: List[List[int]] = []
             
-            _G = ig.Graph.K_Regular(n=N_train, k=N_dynbr, directed=False, multiple=False)
+            _G = ig.Graph.K_Regular(n=N_train, k=N_nei, directed=False, multiple=False)
             for node in range(N_train):
                 neighbors = list(_G.neighbors(node))
                 expander_graph.append(neighbors)
-                
-            self.dyn_graph = torch.tensor(expander_graph, dtype=torch.long, device=main_device)        # (N_train, N_dynbr)
-        elif N_dynbr == N_train:
-            self.dyn_graph = torch.arange(N_train, device=main_device).unsqueeze(0).repeat(N_train, 1) # (N_train, N_train)
+            
+            self.expander_graph = torch.tensor(expander_graph, dtype=torch.long, device=main_device) # (N_train, N_dynbr - N_top)
+            self.dyn_graph = torch.cat(
+                [self.train_top, self.expander_graph],
+                dim=1
+            )   # (N_train, N_dynbr)
         else:
             raise ValueError(f"N_dynbr ({N_dynbr}) cannot be larger than N_train ({N_train})")
         self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_train, 1)     # (N_train, N_stnbr)
@@ -48,7 +53,10 @@ class TrainSampler(BaseSample):
         
     def reset_indices(self):
         randperm = torch.randperm(N_train, device=main_device)
-        self.dyn_graph = self.dyn_graph[randperm]
+        self.dyn_graph = torch.cat(
+            [self.train_top, self.expander_graph[randperm]],
+            dim=1
+        ) # (N_train, N_dynbr)
 
 '''
 class VocabSampler(BaseSample):
@@ -88,22 +96,29 @@ class VocabSampler(BaseSample):
 class ValidSampler(BaseSample):
     def __init__(
         self, 
-        train_dyn_graph: torch.Tensor
+        expander_graph: torch.Tensor, # (N_train, N_dynbr)
+        valid_top: torch.Tensor       # (N_valid, N_top)
     ):
         """
         """
         random_indices  = torch.randint(0, N_train, (N_valid,), device=main_device)
 
-        self.train_dyn_graph = train_dyn_graph.to(main_device)
-        self.dyn_graph = train_dyn_graph[random_indices] # (N_valid, N_dynbr)
-        self.sta_graph = torch.arange   (N_vocab, device=main_device).unsqueeze(0).repeat(N_valid, 1) # (N_valid, N_stnbr)
+        self.expander_graph = expander_graph.to(main_device)
+        self.valid_top      = valid_top.to(main_device)
+        self.dyn_graph      = torch.cat(
+            [self.valid_top, self.expander_graph[random_indices]],
+            dim=1
+        )   # (N_valid, N_dynbr)
 
-    def get_connection(self, block: Tuple[int, int]) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.dyn_graph[block[0]:block[1]], self.sta_graph[block[0]:block[1]]
+    def get_connection(self, block: Tuple[int, int]) -> torch.Tensor:
+        return self.dyn_graph[block[0]:block[1]]
 
     def reset_indices(self):
         random_indices = torch.randint  (0, N_train, (N_valid,), device=main_device) # (N_valid,)
-        self.dyn_graph = self.train_dyn_graph[random_indices] # (N_valid, N_dynbr)
+        self.dyn_graph = torch.cat(
+            [self.valid_top, self.expander_graph[random_indices]],
+            dim=1
+        )   # (N_valid, N_dynbr)
 
 
 if __name__ == "__main__":

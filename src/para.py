@@ -7,7 +7,7 @@ import torch
 
 from src.utils import make_splits
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,3,4,5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 main_device = torch.device('cuda:0')
 devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 num_devices = len(devices)
@@ -17,10 +17,13 @@ data_streams = [torch.cuda.Stream(0) for _ in range(torch.cuda.device_count())]
 
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
 ### 1. GPT 训练相关参数
-parser.add_argument("--cte_train_bs"      , type=int,   default=32,    help="")
-parser.add_argument("--cte_train_iters"   , type=int,   default=1,     help="")
-parser.add_argument("--cte_eval_bs"       , type=int,   default=32,    help="")
-parser.add_argument("--cte_eval_iters"    , type=int,   default=1,     help="")
+# parser.add_argument("--cte_train_bs"      , type=int,   default=32,    help="")
+# parser.add_argument("--cte_train_iters"   , type=int,   default=1,     help="")
+# parser.add_argument("--cte_eval_bs"       , type=int,   default=32,    help="")
+# parser.add_argument("--cte_eval_iters"    , type=int,   default=1,     help="")
+
+parser.add_argument("--N_top"             , type=int,   default=256  , help="")
+parser.add_argument("--pos_ratio"         , type=float  , default=0.5,   help="")
 
 parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
 parser.add_argument("--T_train"           , type=int,   default=128,   help="")
@@ -77,26 +80,25 @@ args = parser.parse_args()
 # assert N_vocab == args.N_vocab, f"实际 N_vocab={N_vocab}, 需与设定值 {args.N_vocab} 一致"
 
 # 超参数：GPT
-batch_size        = 64    
+batch_size        = 128    
 block_size        = 256
-max_iters         = 4000
-val_max_iters     = 1000
+max_iters         = 10000
+val_max_iters     = 100
 gpt_save_interval = 500
 learning_rate     = 3e-4
-eval_iters        = 10
-n_embd            = 384
+n_embd            = 192
 n_head            = 6
 n_layer           = 6
 dropout           = 0.2
 
 # 超参数：GPT 产生给 CTE 训练的数据
-cte_train_bs      = args.cte_train_bs    # 64
-cte_train_iters   = args.cte_train_iters # 5
-cte_train_samples = cte_train_bs * cte_train_iters * block_size # 64 * 5 * 256 = 81,920
-cte_eval_bs       = args.cte_eval_bs     # 32
-cte_eval_iters    = args.cte_eval_iters  # 1
-cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
-cte_save_interval = 1
+# cte_train_bs      = args.cte_train_bs    # 64
+# cte_train_iters   = args.cte_train_iters # 5
+# cte_train_samples = cte_train_bs * cte_train_iters * block_size # 64 * 5 * 256 = 81,920
+# cte_eval_bs       = args.cte_eval_bs     # 32
+# cte_eval_iters    = args.cte_eval_iters  # 1
+# cte_eval_samples  = cte_eval_bs * cte_eval_iters * block_size   # 32 * 1 * 256 = 8,192
+# cte_save_interval = 1
 
 # 超参数：CTE
 h                 = args.h
@@ -112,6 +114,9 @@ use_eu_norm       = args.use_eu_norm       # 1
 use_filter        = args.use_filter        # 0
 
 # 超参数：数据集，及其分块
+N_top             = args.N_top          # 256
+pos_ratio         = args.pos_ratio        # 0.5
+
 N_train           = args.N_train           # 65536
 T_train           = args.T_train           # 256
 
@@ -125,6 +130,7 @@ T_valid           = args.T_valid           # 256
 N_dynbr           = args.N_dynbr           # 
 N_stnbr           = args.N_stnbr           # 
 assert N_stnbr == N_vocab, f"N_stnbr 必须等于 N_vocab, 当前 {N_stnbr} != {N_vocab}"
+assert N_dynbr >= N_top, f"N_dynbr 必须大于等于 num_top, 当前 {N_dynbr} < {N_top}"
 N_nbr             = N_dynbr + N_stnbr      # 
 
 train_blocks      = make_splits(0, N_train, T_train) 

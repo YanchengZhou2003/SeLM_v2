@@ -197,7 +197,7 @@ class GPTLanguageModel(nn.Module):
                 dyn_emb = F.normalize(x, dim=-1)  # (B, T, E)
             loss    = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T), reduction='none') # (B * T,)
             acc     = (logits_eu.argmax(dim=-1) == targets)                                            # (B, T)
-            return loss.view(B, T), dyn_emb, acc, logits_eu
+            return loss.view(B, T), dyn_emb, acc, logits_eu.argmax(dim=-1)
 
         loss_eu = F.cross_entropy(logits_eu.view(B * T, V), targets.view(B * T))
         return loss_eu
@@ -262,7 +262,7 @@ def get_norm_distribution(model: GPTLanguageModel, iter: int):
 
 def train_gpt(gpt_ckpt: str):
     model: GPTLanguageModel = GPTLanguageModel().to(main_device)
-    get_norm_distribution(model, -1)
+    # get_norm_distribution(model, -1)
     # print the number of parameters in the model
     print(sum(p.numel() for p in model.parameters()) / 1e6, 'M parameters')
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
@@ -278,7 +278,7 @@ def train_gpt(gpt_ckpt: str):
 
         
         if iter % gpt_save_interval == 0 or iter == max_iters - 1:
-            get_norm_distribution(model, iter)
+            # get_norm_distribution(model, iter)
             print(f"current iter: {iter}, avg loss in last {gpt_save_interval} iters: {sum(running_loss) / len(running_loss)}")
             running_loss = []
             torch.save(model.state_dict(), os.path.join(gpt_path, gpt_ckpt.format(iter)))
@@ -337,21 +337,6 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
         eval_emb.append(dyn_emb[:, -1, :].cpu())
         # valid_last_token_loss.append(loss[:, -1].cpu()) # (B,)
         # valid_last_token_acc.append(acc[:, -1].cpu())   # (B,)
-
-    ### step 3: 筛选 training 中 loss < 1.0 的部分，且
-    # train_y_stack = torch.stack(train_y, dim=0).reshape(-1)  # (cte_train_iters * cte_train_bs)
-    # train_emb_stack = torch.stack(train_emb, dim=0).reshape(-1, n_embd) # (cte_train_iters * cte_train_bs, n_embd)
-    # train_last_token_acc_stack = torch.cat(train_last_token_acc, dim=0) # (cte_train_iters * cte_train_bs)，这里虽然命名为 acc，但其实是 bool 值
-    # # keep_indices = (train_last_token_loss_stack < 1.0)
-    # keep_indices = (train_last_token_acc_stack == 1).nonzero(as_tuple=True)[0]
-    # print(f"Before filtering: train cache length: {train_y_stack.shape[0]}, after filtering: {keep_indices.shape[0]}, after pow_2 filtering: ", end="")
-    # ##### 为了保证一致性，我们只需要 2 的次方长度的数据
-    # keep_indices = keep_indices[:2 ** int(torch.log2(torch.tensor(keep_indices.shape[0], dtype=torch.float32)).item())]
-    # print(f"{keep_indices.shape[0]}")
-    
-    # train_y_filtered = train_y_stack[keep_indices]
-    # train_emb_filtered = train_emb_stack[keep_indices]
-    
     
     ### step 3: 拼接并保存
     train_cache = {
@@ -393,10 +378,112 @@ def get_cte_train_and_test(gpt_ckpt: str, cache_save_path: str):
     save_file(train_cache, cache_save_path.format(train_cache_length, 'train'))
     save_file(eval_cache, cache_save_path.format(eval_cache_length, 'val'))
 
+@torch.no_grad()
+def get_cte_train_and_test_by_ratio(gpt_ckpt: str, train_cache_path: str, valid_cache_path: str):
+    ### step 0: 准备模型
+    model: GPTLanguageModel = GPTLanguageModel()
+    model_cktp = torch.load(os.path.join(gpt_path, gpt_ckpt), map_location='cpu')
+    model.load_state_dict(model_cktp)
+    model = model.to(main_device)
+    model.eval()
+    
+    ### step 1: 准备基本数据
+    train_y_pos, train_emb_pos = [], []
+    train_y_neg, train_emb_neg = [], []
+    
+    eval_y, eval_emb = [], []
+    
+    ### step 2: 迭代获取动态嵌入（dyn_emb）与数据元信息（ix）
+    pos_num, neg_num = 0, 0
+    pos_tar_num, neg_tar_num = int(round(N_train * pos_ratio)), int(round(N_train * (1 - pos_ratio)))
+    
+    while True:
+        X_train, Y_train, _ = get_batch('train', to_cuda=True)
+        loss, dyn_emb, acc, prediction = model(X_train, targets=Y_train, return_dyn_loss=True) # (B, T), (B, T, E)
+        
+        pos_indices = (prediction[:, -1] == Y_train[:, -1]) # (B,)
+        neg_indices = (prediction[:, -1] != Y_train[:, -1]) # (B,)
+        
+        if pos_num < pos_tar_num:
+            train_y_pos.append(Y_train[pos_indices, -1].cpu())
+            train_emb_pos.append(dyn_emb[pos_indices, -1, :].cpu())
+            pos_num += pos_indices.sum().item()
+            print(f"pos_num: {pos_num} / {pos_tar_num}")
+        if neg_num < neg_tar_num:
+            train_y_neg.append(Y_train[neg_indices, -1].cpu())
+            train_emb_neg.append(dyn_emb[neg_indices, -1, :].cpu())
+            neg_num += neg_indices.sum().item()
+            print(f"neg_num: {neg_num} / {neg_tar_num}")
+        
+        if pos_num >= pos_tar_num and neg_num >= neg_tar_num:
+            break
+        
+    eval_num = 0
+    eval_tar = N_valid
+    
+    while True:
+        X_val, Y_val, _ = get_batch('val', to_cuda=True)
+        loss, dyn_emb, acc, _ = model(X_val, targets=Y_val, return_dyn_loss=True) # (B, T), (B, T, E)
+        eval_y.append(Y_val[:, -1].cpu())
+        eval_emb.append(dyn_emb[:, -1, :].cpu())
+        
+        eval_num += Y_val.shape[0]
+        print(f"eval_num: {eval_num} / {eval_tar}")
+        if eval_num >= eval_tar:
+            break
+    
+    ### step 3: 拼接并保存
+    train_y = torch.cat(train_y_pos + train_y_neg, dim=0) 
+    train_y = train_y[:N_train]
+    train_emb = torch.cat(train_emb_pos + train_emb_neg, dim=0)
+    train_emb = train_emb[:N_train]
+    eval_y = torch.cat(eval_y, dim=0)[:N_valid]
+    eval_emb = torch.cat(eval_emb, dim=0)[:N_valid]
+    
+    train_cache = {
+        'y': train_y,            # (N_train)
+        'emb': train_emb         # (N_train, n_embd)
+    }
+    eval_cache = {
+        'y': eval_y,             # (N_valid)
+        'emb': eval_emb          # (N_valid, n_embd)
+    }
+    train_cache_length = train_cache['emb'].shape[0] 
+    eval_cache_length = eval_cache['emb'].shape[0]
+    
+    ### step 4: 可视化 loss 的分布
+    # train_last_token_loss = torch.cat(train_last_token_loss, dim=0).numpy()
+    # valid_last_token_loss = torch.cat(valid_last_token_loss, dim=0).numpy()
+    
+    # fig, ax1 = plt.subplots()
+    
+    # # Train loss histogram on left y-axis
+    # ax1.hist(train_last_token_loss, bins=50, alpha=0.5, color='blue', label='Train Last Token Loss')
+    # ax1.set_xlim((0, 1.5))
+    # ax1.set_xlabel('Loss')
+    # ax1.set_ylabel('Train Frequency', color='blue')
+    # ax1.tick_params(axis='y', labelcolor='blue')
+    
+    # # Valid loss histogram on right y-axis
+    # ax2 = ax1.twinx()
+    # ax2.hist(valid_last_token_loss, bins=50, alpha=0.5, color='red', label='Valid Last Token Loss')
+    # ax2.set_ylabel('Valid Frequency', color='red')
+    # ax2.tick_params(axis='y', labelcolor='red')
+    
+    # plt.title('Distribution of Last Token Loss')
+    # fig.tight_layout()
+    # plt.savefig(f'last_token_loss_distribution_ori{train_last_token_loss.shape[0]}_cur{train_cache_length}.png')
+    # plt.close()
+    
+    print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
+    save_file(train_cache, os.path.join(cache_path, train_cache_path))
+    save_file(eval_cache, os.path.join(cache_path, valid_cache_path))
+
+
 ################ ------------- 训练 CTE ------------- ################
 
 @torch.no_grad()
-def train_cte(
+def main_cte(
     train_cache_cktp: str, 
     valid_cache_cktp: str,
     gpt_ckpt: str, 
@@ -408,8 +495,8 @@ def train_cte(
     assert math.log2(val_length) % 1 == 0, "val_length 必须是 2 的整数次幂"
     
     
-    train_cache = load_file(os.path.join(cache_path, train_cache_cktp.format(train_length)), device='cpu')
-    valid_cache = load_file(os.path.join(cache_path, valid_cache_cktp.format(val_length, train_length)), device='cpu')
+    train_cache = load_file(os.path.join(cache_path, train_cache_cktp), device='cpu')
+    valid_cache = load_file(os.path.join(cache_path, valid_cache_cktp), device='cpu')
     train_cache, valid_cache = pin_tensors_in_dict(train_cache), pin_tensors_in_dict(valid_cache)
     
     ''' debug '''
@@ -423,10 +510,10 @@ def train_cte(
     vocab_emb   = F.normalize(gpt_weights['token_embedding_table.weight'], dim=-1) # (N_valid, n_embd), not pinned
     train_emb   = train_cache['emb']                                               # (N_train, n_embd), pinned memory
     train_y     = train_cache['y']                                                 # (N_train, ),       pinned memory
-    # train_top   = train_cache['rk']
+    train_top   = train_cache['rk']
     valid_emb   = valid_cache['emb']                                               # (N_valid, n_embd), pinned memory
     valid_y     = valid_cache['y']                                                 # (N_valid, ),       pinned memory
-    # valid_top   = valid_cache['rk']
+    valid_top   = valid_cache['rk']
     
     ### step 2: 初始化 GPT 和 CTE
     emb_size    = N_train + N_vocab + N_valid
@@ -453,11 +540,11 @@ def train_cte(
 
     if not valid_only:
         cte.train_all(
-            train_emb, vocab_emb, train_y
+            train_emb, train_top, vocab_emb, train_y
         )
     if not train_only:
         cte.valid_all(
-            train_emb, valid_emb, vocab_emb, valid_y,
+            train_emb, valid_emb, valid_top, vocab_emb, valid_y,
         )
 
 
@@ -466,30 +553,27 @@ def train_cte(
 
 
 if __name__ == "__main__":
-    gpt_ckpt = f"65_normed_b{block_size}_" + "iters_{}.pth" # .format(2999)
+    print("Starting GPT training and evaluation...")
+    print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    gpt_ckpt = f"voc{N_vocab}_normfixed20_b{block_size}" + "_iters_{}.pth" # .format(2999)
     # gpt_ckpt = f"tmp_" + "iters_{}.pth" # .format(2999)
     # train_gpt(gpt_ckpt)
-    # for iters in [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 3999]:
+    # for iters in [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 9999]:
+    #     print(f"Evaluating GPT at iters={iters}")
     #     eval_gpt(gpt_ckpt.format(iters))
-    # cte_ckpt = f"b_{block_size}" + "gpt_iters_2999_cte_iters_{}.pth"
-    # cache_ckpt = gpt_ckpt.replace(".pth", "") + "_l{}_{}_cache_fixed256.pth"
     
+    best_valid_epoch = 9999
+    gpt_ckpt = gpt_ckpt.format(best_valid_epoch)
+    # train_cache_ckpt = gpt_ckpt.replace(".pth", "") + f"_ps{pos_ratio}_train{N_train}_cache_last.pth"
+    # valid_cache_ckpt = gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
     
-    gpt_ckpt = gpt_ckpt.format(3999)
-    # get_cte_train_and_test(gpt_ckpt, "gpt65_normed_b128_iters_3999_l{}_{}_cache.pth")
-    if not use_filter:
-        train_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_train_cache.pth"
-        valid_cache_ckpt = "gpt65_normed_b128_iters_3999_l{}_val_cache.pth"
-    else:
-        train_cache_ckpt = "65_normed_b256_iters_3999_l{}_train_new_cache_onlylast_onlygood_filtered.pth"
-        valid_cache_ckpt = "65_normed_b256_iters_3999_l{}_query_vs_train{}_filtered.pth"
+    # get_cte_train_and_test_by_ratio(gpt_ckpt, train_cache_ckpt, valid_cache_ckpt)
     
-    train_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
+    train_cache_ckpt = f"rk{N_top}_" + gpt_ckpt.replace(".pth", "") + f"_ps{pos_ratio}_train{N_train}_cache_last.pth"
+    valid_cache_ckpt = f"rk{N_top}_" + f"q=ps{pos_ratio}_train{N_train}_" + gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
     
+    main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     
-    # validate_cte(
-    #     os.path.join(gpt_path, gpt_ckpt),
-    #     os.path.join(cte_path, cte_ckpt.format(0)),
-    #     os.path.join(train_cache_path, train_cache_ckpt.format(0))
-    # )
+    print("Finished GPT training and evaluation.")
+    print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                  
