@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from src.gettime import CUDATimer, gettime, mark
 from src.loom_kernel import ct_val_triton, kernel_ct_val_fused_cd
+from src.new_loom_kernel import ct_loss_triton_sampled_2dteacher
 from src.para import *
 from src.sampler import *
 from src.utils import *
@@ -190,6 +191,7 @@ class CritiGraph(torch.nn.Module):
         #     cos_sta_pos_sum[:, :, None, None] - cos_sta_pos[:, :, None, :] + cos_cnc_pos
         # ) / self.tp * eu_nrm[:, :, None, None]         
         
+        
         ct_val = ct_val_triton(
             cnc_loc.to(torch.int32).contiguous(),
             pos_loc.to(torch.int32).contiguous(),
@@ -231,7 +233,31 @@ class CritiGraph(torch.nn.Module):
             ).squeeze(1) # (T_train, N_C, dim_ct)
         else:
             loss_dyn_sta = None
-                                          
+        
+        # T = T_train if cur_type == "train" else T_valid
+        # S = N_nbr if cur_type == "train" else N_dynbr
+        
+        # loss_dyn_dyn, loss_dyn_sta = ct_loss_triton_sampled_2dteacher(
+        #     cnc_loc=cnc_loc,
+        #     pos_loc=pos_loc,
+        #     eu_norm=torch.ones((T, S), device=device, dtype=torch.float32).contiguous(),
+        #     cos_sta_pos=cos_sta_pos,
+        #     cos_sta_pos_sum=cos_sta_pos_sum,
+        #     eu_teacher=eu_val,     # [T,S] 或 [T,S,1,1]
+        #     tp=float(self.tp),
+        #     h=float(self.h),
+        #     temperature=temperature,
+        #     N_dynbr=N_dynbr,
+        #     N_topk=N_top,
+        #     N_total=N_train,               # 你采样的总池大小
+        #     cur_type=cur_type,             # "train" / "valid"
+        #     cur_tar=cur_tar if cur_type == "train" else None,
+        #     scale=20.0,
+        #     BLOCK_S=128,
+        #     BLOCK_CD=64,
+        # )
+
+                                    
         return loss_dyn_dyn, loss_dyn_sta
 
     def loom_sta(
@@ -523,122 +549,194 @@ class CritiGraph(torch.nn.Module):
     
     #     return loss_dyn_dyn
     '''
-    
+
     def train_dyn_blocks(self, sid: int):
         device = devices[sid]
+
+        read_stream  = read_streams[sid]
+        comp_stream  = comp_streams[sid]
+        write_stream = write_streams[sid]
+
         
+        # ======================================================
+        # read stream k 必须等待 write stream k - prefetch 完成
+        # read stream 0 不需要等待，所以提前插入 read stream 自身 event
+        # 也即，插入占位 event；此时无需等待任何 write stream
+        # ======================================================
+        prev_write_done_list = []
+        for _ in range(prefetch + 1):
+            e = torch.cuda.Event(enable_timing=False, blocking=False)
+            e.record(read_stream)
+            prev_write_done_list.append(e)
+
         for train_block_id in train4sid[sid]:
+
             train_block = train_blocks[train_block_id]
             train_slice = slice(train_block[0], train_block[1])
-            
-            ### step.1 准备数据
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _dyn_idx, _voc_idx = self.train_sampler.get_connection(train_block, )   # (T_train, N_ttnbr)
-                _cur_tar = self.train_tar[train_slice]                    # (T_train, )
 
-                _sta_loc = self.train_locations[train_slice]                  # (T_train, dim_ct)
+            # ======================================================
+            # Step 1: READ
+            # ======================================================
+            with torch.cuda.device(main_device), torch.cuda.stream(read_stream):
+
+                torch.cuda.nvtx.range_push(f"READ block {train_block_id} sid {sid}")
+
+                read_stream.wait_event(prev_write_done_list[0])
+
+                _dyn_idx, _voc_idx = self.train_sampler.get_connection(train_block)
+
+                _cur_tar = self.train_tar[train_slice]
+                _sta_loc = self.train_locations[train_slice]
                 _pos_loc = torch.cat([
                     self.train_locations[_dyn_idx],
                     self.vocab_locations[_voc_idx],
-                ], dim=1)                                                     # (T_train, N_nbr, dim_ct)
+                ], dim=1)
 
-
-                _sta_emb = self.train_emb[train_slice]                        # (T_train, dim_eu)
+                _sta_emb = self.train_emb[train_slice]
                 _pos_emb = torch.cat([
                     self.train_emb[_dyn_idx],
                     self.vocab_emb[_voc_idx]
-                ], dim=1)                                                     # (T_train, N_nbr, dim_eu)
-                
+                ], dim=1)
+
                 data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
-                data_ready_event.record(data_streams[sid])
+                data_ready_event.record(read_stream)
 
-            ### step.2 计算 loss 并选择最佳位置
-            with torch.cuda.device(device), torch.cuda.stream(defa_streams[sid]):
-                defa_streams[sid].wait_event(data_ready_event)
-                
-                cur_tar, sta_loc, pos_loc, sta_emb, pos_emb = (
-                    _cur_tar.to(device, non_blocking=True),
-                    _sta_loc.to(device, non_blocking=True),
-                    _pos_loc.to(device, non_blocking=True),
-                    _sta_emb.to(device, non_blocking=True),
-                    _pos_emb.to(device, non_blocking=True),
-                )
-                
-                cnc_loc   = self.connection(sta_loc, dev_num=sid)
-                # mask      = self.converge_mask(T_train, N_nbr, sid)
+                torch.cuda.nvtx.range_pop()
 
+            # ======================================================
+            # Step 2: COMPUTE
+            # ======================================================
+            with torch.cuda.device(device), torch.cuda.stream(comp_stream):
+
+                torch.cuda.nvtx.range_push(f"COMPUTE block {train_block_id} sid {sid}")
+
+                comp_stream.wait_event(data_ready_event)
+
+                cur_tar = _cur_tar.to(device, non_blocking=True)
+                sta_loc = _sta_loc.to(device, non_blocking=True)
+                pos_loc = _pos_loc.to(device, non_blocking=True)
+                sta_emb = _sta_emb.to(device, non_blocking=True)
+                pos_emb = _pos_emb.to(device, non_blocking=True)
+
+                cnc_loc = self.connection(sta_loc, dev_num=sid)
                 loss_dyn_dyn, loss_dyn_sta = self.loom_dyn(
                     cur_tar,
                     cnc_loc,
                     sta_loc, pos_loc,
                     sta_emb, pos_emb,
-                    None, sid,
-                    "train"
+                    None, sid, "train"
                 )
-                
+
                 loss_total = ratio_dyn * loss_dyn_dyn + ratio_sta * loss_dyn_sta
-                
+
                 selected_locs, tot_dyn_loss, dyn_dyn_loss, dyn_sta_loss = self.get_best_loc(
                     cnc_loc, loss_total, loss_dyn_dyn, loss_dyn_sta, sid
-                ) # (T_train, ), (T_train, dim_ct)
-                
+                )
+
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
-                comp_ready_event.record(defa_streams[sid])
-            
-            ### step.3 将结果写回主存
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                data_streams[sid].wait_event(comp_ready_event)
-                
+                comp_ready_event.record(comp_stream)
+
+                torch.cuda.nvtx.range_pop()
+
+            # ======================================================
+            # Step 3: WRITE
+            # ======================================================
+            with torch.cuda.device(main_device), torch.cuda.stream(write_stream):
+
+                torch.cuda.nvtx.range_push(f"WRITE block {train_block_id} sid {sid}")
+
+                write_stream.wait_event(comp_ready_event)
+
                 self.new_train_locations[train_slice] = selected_locs.to(main_device, non_blocking=True)
-                self.tot_dyn_loss       [train_slice] = tot_dyn_loss .to(main_device, non_blocking=True)
-                self.dyn_dyn_loss       [train_slice] = dyn_dyn_loss .to(main_device, non_blocking=True)
-                self.dyn_sta_loss       [train_slice] = dyn_sta_loss .to(main_device, non_blocking=True)
+                self.tot_dyn_loss[train_slice]        = tot_dyn_loss.to(main_device, non_blocking=True)
+                self.dyn_dyn_loss[train_slice]        = dyn_dyn_loss.to(main_device, non_blocking=True)
+                self.dyn_sta_loss[train_slice]        = dyn_sta_loss.to(main_device, non_blocking=True)
+
+                write_done_event = torch.cuda.Event(enable_timing=False, blocking=False)
+                write_done_event.record(write_stream)
+
+                prev_write_done_list.pop(0)
+                prev_write_done_list.append(write_done_event)
+
+                torch.cuda.nvtx.range_pop()
 
     def train_sta_blocks(self, sid: int):
         device = devices[sid]
-        
+
+        read_stream  = read_streams[sid]
+        comp_stream  = comp_streams[sid]
+        write_stream = write_streams[sid]
+
+        # 初始化 prefetch+1 个已完成事件（pipeline 起点）
+        prev_write_done_list = []
+        for _ in range(prefetch + 1):
+            e = torch.cuda.Event(enable_timing=False, blocking=False)
+            e.record(read_stream)     # 立即完成
+            prev_write_done_list.append(e)
+
+        # 主循环：遍历 vocab block
         for vocab_block_id in vocab4sid[sid]:
+
             vocab_block = vocab_blocks[vocab_block_id]
             vocab_slice = slice(vocab_block[0], vocab_block[1])
-            
-            ### step.1 准备数据
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _sta_loc = self.vocab_locations[vocab_slice]                 # (T_vocab, dim_ct)
-                _sta_emb = self.vocab_emb      [vocab_slice]                 # (T_vocab, dim_eu)
-                
-                data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
-                data_ready_event.record(data_streams[sid])
 
-            ### step.2 计算 loss 并选择最佳位置
-            with torch.cuda.device(device), torch.cuda.stream(defa_streams[sid]):
-                defa_streams[sid].wait_event(data_ready_event)
-                
-                sta_loc, sta_emb = (
-                    _sta_loc.to(device, non_blocking=True),
-                    _sta_emb.to(device, non_blocking=True),
-                )
-                
+            # ======================================================
+            # Step 1: READ (in cuda:0, read_stream)
+            # ======================================================
+            with torch.cuda.device(main_device), torch.cuda.stream(read_stream):
+
+                # 限制 read 超前（防止 device(0) 内存爆炸）
+                read_stream.wait_event(prev_write_done_list[0])
+
+                _sta_loc = self.vocab_locations[vocab_slice]   # (T_vocab, dim_ct)
+                _sta_emb = self.vocab_emb      [vocab_slice]   # (T_vocab, dim_eu)
+
+                data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
+                data_ready_event.record(read_stream)
+
+            # ======================================================
+            # Step 2: COMPUTE (in cuda:sid, comp_stream)
+            # ======================================================
+            with torch.cuda.device(device), torch.cuda.stream(comp_stream):
+
+                comp_stream.wait_event(data_ready_event)
+
+                sta_loc = _sta_loc.to(device, non_blocking=True)
+                sta_emb = _sta_emb.to(device, non_blocking=True)
+
                 cnc_loc = self.voc_cnc_loc[sid]
-                
-                loss    = self.loom_sta(
+
+                loss = self.loom_sta(
                     cnc_loc,
                     sta_loc, sta_emb,
                     sid
                 )
-                
+
                 selected_locs, sta_sta_loss, _, _ = self.get_best_loc(
                     cnc_loc, loss, None, None, sid
-                ) # (T_train, ), (T_train, dim_ct)
-                
+                )
+
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
-                comp_ready_event.record(defa_streams[sid])
-        
-            ### step.3 将结果写回主存
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                data_streams[sid].wait_event(comp_ready_event)
-                
+                comp_ready_event.record(comp_stream)
+
+            # ======================================================
+            # Step 3: WRITE (in cuda:0, write_stream)
+            # ======================================================
+            with torch.cuda.device(main_device), torch.cuda.stream(write_stream):
+
+                write_stream.wait_event(comp_ready_event)
+
                 self.new_vocab_locations[vocab_slice] = selected_locs.to(main_device, non_blocking=True)
-                self.sta_sta_loss       [vocab_slice] = sta_sta_loss .to(main_device, non_blocking=True)
+                self.sta_sta_loss      [vocab_slice] = sta_sta_loss.to(main_device, non_blocking=True)
+
+                # 更新写完成事件（滑动窗口）
+                write_done_event = torch.cuda.Event(enable_timing=False, blocking=False)
+                write_done_event.record(write_stream)
+
+                prev_write_done_list.pop(0)
+                prev_write_done_list.append(write_done_event)
+
+
 
     '''旧版本的 sta-dyn 对齐代码
     def train_sta_blocks(self, sid: int):
@@ -1112,10 +1210,7 @@ class CritiGraph(torch.nn.Module):
             torch.cuda.synchronize(device)
             torch.cuda.default_stream(device).synchronize()
             
-        for stream in defa_streams:
-            stream.synchronize()
-        
-        for stream in data_streams:
+        for stream in read_streams + comp_streams + write_streams:
             stream.synchronize()
 
         

@@ -549,16 +549,13 @@ def main_cte(
 
 
         
-
-
-
 if __name__ == "__main__":
     print("Starting GPT training and evaluation...")
     print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     gpt_ckpt = f"voc{N_vocab}_normfixed20_b{block_size}" + "_iters_{}.pth" # .format(2999)
     # gpt_ckpt = f"tmp_" + "iters_{}.pth" # .format(2999)
     # train_gpt(gpt_ckpt)
-    # for iters in [0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 5500, 6000, 6500, 7000, 7500, 8000, 8500, 9000, 9500, 9999]:
+    # for iters in [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 9999]:
     #     print(f"Evaluating GPT at iters={iters}")
     #     eval_gpt(gpt_ckpt.format(iters))
     
@@ -571,9 +568,18 @@ if __name__ == "__main__":
     
     train_cache_ckpt = f"rk{N_top}_" + gpt_ckpt.replace(".pth", "") + f"_ps{pos_ratio}_train{N_train}_cache_last.pth"
     valid_cache_ckpt = f"rk{N_top}_" + f"q=ps{pos_ratio}_train{N_train}_" + gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
+    try:
+        main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
+    except Exception as e:
+        print("An error occurred during CTE training/evaluation:", str(e))
+        traceback.print_exc()
+        os._exit(1)
     
+<<<<<<< HEAD
     main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     
+=======
+>>>>>>> efa4b3170c37c95e51f5f742db2f71e4a1fc172a
     print("Finished GPT training and evaluation.")
     print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                  
