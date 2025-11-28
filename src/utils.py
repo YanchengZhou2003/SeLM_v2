@@ -1345,3 +1345,45 @@ def thread_guard(func):
             os._exit(1)
     return wrapper
 
+
+import torch
+import torch.nn.functional as F
+
+def sampled_softmax_loss(eu_val, ct_val, N_sampled, N_topk, temperature, N_total):
+
+
+    # 1. 计算 HT 权重 w_i
+    # ----------------------------------------------------------
+    # 剩余部分原本大小为 (N_total - N_top)，你从其中随机采样 (N_dynbr - N_top)
+    n_random = N_sampled - N_topk
+    total_random_pool = N_total - N_topk
+
+    # inclusion probability
+    pi = n_random / total_random_pool
+
+    # w: (N_dynbr,)
+    w = torch.ones(N_sampled, device=eu_val.device, dtype=eu_val.dtype)
+    if n_random > 0:
+        w[N_topk:N_sampled] = 1.0 / pi
+
+    # log w: reshape 成 (1, N_dynbr, 1, 1)
+    log_w = torch.log(w).view(1, N_sampled, 1, 1)
+
+    # 2. 构造 HT 修正后的 logits
+    # ----------------------------------------------------------
+    scale = 20.0 / temperature
+
+    eu_adj = eu_val * scale + log_w
+    ct_adj = ct_val * scale + log_w
+
+    # 3. 使用 HT 加权后的 logits 计算 softmax / log_softmax
+    # ----------------------------------------------------------
+    p_x      = torch.softmax(eu_adj, dim=1)       # (B, N_dynbr, N_C, D)
+    log_p_x  = torch.log_softmax(eu_adj, dim=1)
+    log_p_y  = torch.log_softmax(ct_adj, dim=1)
+
+    # 4. 最终 loss
+    # ----------------------------------------------------------
+    # sum over softmax-dimension (=1)
+    loss = ((log_p_x - log_p_y) * p_x).sum(dim=1)
+    return loss

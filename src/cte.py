@@ -26,12 +26,14 @@ main_device = torch.device(0) if torch.cuda.is_available() else torch.device('cp
 from typing import List, Tuple
 
 @dataclass
-class LossRecord:
+class TrainLossRecord:
     dyn_dyn_loss: float = 0.0
     dyn_sta_loss: float = 0.0
     tot_dyn_loss: float = 0.0
     sta_sta_loss: float = 0.0
 
+class ValidLossRecord:
+    tot_dyn_loss: float = 0.0
 
 class CritiGraph(torch.nn.Module):
 
@@ -191,7 +193,7 @@ class CritiGraph(torch.nn.Module):
         ct_val = ct_val_triton(
             cnc_loc.to(torch.int32).contiguous(),
             pos_loc.to(torch.int32).contiguous(),
-            torch.ones((T_train if cur_type=="train" else T_valid, N_nbr), device=device, dtype=torch.float32).contiguous(),
+            torch.ones((T_train if cur_type=="train" else T_valid, N_nbr if cur_type=="train" else N_dynbr), device=device, dtype=torch.float32).contiguous(),
             cos_sta_pos.contiguous(),
             cos_sta_pos_sum.contiguous(),
             tp=float(self.tp),
@@ -212,16 +214,21 @@ class CritiGraph(torch.nn.Module):
         #     torch.square(eu_val[:, 0:N_dynbr, :, :] - ct_val[:, :N_dynbr, :, :]) 
         #     * torch.abs(eu_val[:, :N_dynbr, :, :]) # (T_train, N_dynbr + N_stnbr, N_C, dim_ct)
         # ).sum(dim=1)  # (T_train, N_C, dim_ct)
-        loss_dyn_dyn = (
-            (F.log_softmax(eu_val[:, :N_dynbr, :, :] * 20 / temperature, dim=1) 
-            - F.log_softmax(ct_val[:, :N_dynbr, :, :] * 20 / temperature, dim=1)) 
-            * F.softmax(eu_val[:, :N_dynbr, :, :] * 20 / temperature, dim=1)
-        ).sum(dim=1)  # (T_train, N_C, dim_ct)
+        # loss_dyn_dyn = (
+        #     ( F.log_softmax(eu_val[:, :N_dynbr, :, :] * 20 / temperature, dim=1) 
+        #     - F.log_softmax(ct_val[:, :N_dynbr, :, :] * 20 / temperature, dim=1)) 
+        #     * F.softmax(eu_val[:, :N_dynbr, :, :] * 20 / temperature, dim=1)
+        # ).sum(dim=1)  # (T_train, N_C, dim_ct)
+        loss_dyn_dyn = sampled_softmax_loss(
+            eu_val[:, :N_dynbr, :, :], 
+            ct_val[:, :N_dynbr, :, :], 
+            N_dynbr, N_top, temperature, N_train
+        ) # (T_train, N_C, dim_ct)
         if cur_type == "train":
             loss_dyn_sta = (- F.log_softmax(ct_val[:, N_dynbr:, :, :] * 20 / temperature, dim=1)).gather(
                 dim=1,
                 index=cur_tar[:, None, None, None].expand(-1, -1, N_C, tp)
-            ).squeeze(1)
+            ).squeeze(1) # (T_train, N_C, dim_ct)
         else:
             loss_dyn_sta = None
                                           
@@ -693,19 +700,13 @@ class CritiGraph(torch.nn.Module):
             
             ### step.1 准备数据
             with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _dyn_idx, _voc_idx = self.valid_sampler.get_connection(valid_block)
-                                                                             # (T_valid, N_vanbr)
+                _dyn_idx = self.valid_sampler.get_connection(valid_block)
+                                                                             # (T_valid, N_dynbr)
                 _sta_loc = self.valid_locations[valid_slice]                 # (T_valid, dim_ct)
-                _pos_loc = torch.cat([
-                    self.train_locations[_dyn_idx],                          # (T_valid, N_vanbr, dim_ct)
-                    self.vocab_locations[_voc_idx],                          # (T_valid, N_vanbr, dim_ct)
-                ], dim=1)
+                _pos_loc = self.train_locations[_dyn_idx]                    # (T_valid, N_dynbr, dim_ct)
 
                 _sta_emb = self.valid_emb[valid_slice]                       # (T_valid, dim_eu)
-                _pos_emb = torch.cat([
-                    self.train_emb[_dyn_idx],                                # (T_valid, N_vanbr, dim_eu)
-                    self.vocab_emb[_voc_idx],                                # (T_valid, N_vanbr, dim_eu)
-                ], dim=1)
+                _pos_emb = self.train_emb[_dyn_idx]                          # (T_valid, N_dynbr, dim_eu)
                 
                 data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
                 data_ready_event.record(data_streams[sid])
@@ -789,7 +790,7 @@ class CritiGraph(torch.nn.Module):
     def train_all(
         self,        
         train_emb : torch.Tensor, # (N_train, dim)
-        # train_top : torch.Tensor, # (N_train, >=N_dynbr)
+        train_top : torch.Tensor, # (N_train, num_rk)
         vocab_emb : torch.Tensor, # (N_vocab, dim)
         train_tar : torch.Tensor, # (N_train, )   
     ):  
@@ -806,7 +807,7 @@ class CritiGraph(torch.nn.Module):
         self.vocab_emb     = vocab_emb.to(main_device)
         self.voc_emb       = [vocab_emb.to(device, non_blocking=True) for device in devices]
         
-        self.train_sampler = TrainSampler()
+        self.train_sampler = TrainSampler(train_top)
 
         self.dyn_dyn_loss  = torch.zeros(N_train, device=main_device)
         self.dyn_sta_loss  = torch.zeros(N_train, device=main_device)
@@ -838,7 +839,7 @@ class CritiGraph(torch.nn.Module):
             mark(ST, "epoch_preparation")
             self.cur_epoch = cur_epoch
             self.converge  = train_converge is not None and (self.cur_epoch >= train_converge)
-            loss_split_record = LossRecord()
+            loss_split_record = TrainLossRecord()
             
             if cur_epoch % train_graph_reset == 0 and cur_epoch != 0:
                 self.train_sampler.reset_indices()
@@ -906,7 +907,7 @@ class CritiGraph(torch.nn.Module):
         torch.save( 
             {
                 "train_locations": self.train_locations.cpu(),
-                "train_dyn_graph": self.train_sampler.dyn_graph.cpu(),
+                "expander_graph" : self.train_sampler.expander_graph.cpu(),
                 "vocab_locations": self.vocab_locations.cpu(),
             },
             train_save_path
@@ -921,7 +922,7 @@ class CritiGraph(torch.nn.Module):
         self,
         train_emb : torch.Tensor, # (N_train, dim)
         valid_emb : torch.Tensor, # (N_train, dim)
-        # valid_top : torch.Tensor, # (N_valid, *)
+        valid_top : torch.Tensor, # (N_valid, *)
         vocab_emb : torch.Tensor, # (N_vocab, dim)
         valid_tar : torch.Tensor, # (N_train, )  
     ):
@@ -937,11 +938,9 @@ class CritiGraph(torch.nn.Module):
         self.vocab_emb     = vocab_emb.to(main_device)
         self.valid_tar     = valid_tar.long().to(main_device)
         
-        self.valid_sampler = ValidSampler(train_data['train_dyn_graph'].to(main_device))
+        self.valid_sampler = ValidSampler(train_data['expander_graph'], valid_top)
 
-        self.dyn_dyn_loss  = torch.zeros(N_valid, device=main_device)
-        self.dyn_sta_loss  = torch.zeros(N_valid, device=main_device)
-        self.tot_dyn_loss    = torch.zeros(N_valid, device=main_device)
+        self.tot_dyn_loss  = torch.zeros(N_valid, device=main_device)
 
         self.train_locations     = train_data['train_locations'].to(main_device)
         self.vocab_locations     = train_data['vocab_locations'].to(main_device)
@@ -972,11 +971,8 @@ class CritiGraph(torch.nn.Module):
             mark(ST, "epoch_preparation")
             self.cur_epoch = cur_epoch
             self.converge  = valid_converge is not None and (self.cur_epoch >= valid_converge)
-            loss_split_record = {
-                "dyn_dyn_cos_loss":  0.,
-                "dyn_sta_cos_loss":  0.,
-                "total_cos_loss":    0.,
-            }
+            loss_split_record = ValidLossRecord()
+            loss_split_record.tot_dyn_loss = 0.0
             
             if cur_epoch % valid_graph_reset == 0 and cur_epoch != 0:
                 self.valid_sampler.reset_indices()
@@ -1003,12 +999,10 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch_pos_train", father="epoch")
             
             ### step 3.4: 记录与打印
-            loss_split_record[f"dyn_dyn_cos_loss"] = self.dyn_dyn_loss.sum().item() / N_valid
-            loss_split_record[f"dyn_sta_cos_loss"] = self.dyn_sta_loss.sum().item() / N_valid
-            loss_split_record[f"total_cos_loss"]   = self.tot_dyn_loss.sum().item() / N_valid
+            loss_split_record.tot_dyn_loss = self.tot_dyn_loss.sum().item() / N_valid
             
             print(f"epoch {cur_epoch:3d} summary:", end=" ")
-            for k, v in loss_split_record.items():    
+            for k, v in loss_split_record.__dict__.items():
                 print(f"{k:15s}: {v:.5f}", end=", ")
             print()
             sys.stdout.flush()
@@ -1074,7 +1068,7 @@ class CritiGraph(torch.nn.Module):
         loss     /= (N_train if cur_type == "train" else N_valid)
         accuracy /= (N_train if cur_type == "train" else N_valid)
 
-        print(f"{cur_type:5s} loss: {loss:.4f}, {cur_type:5s} acc: {accuracy:.4f}")
+        print(f"{cur_type:5s} loss: {loss:.6f}, {cur_type:5s} acc: {accuracy:.4f}")
         sys.stdout.flush()
         
         return loss
