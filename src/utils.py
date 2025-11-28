@@ -1332,17 +1332,23 @@ def in_debug_mode() -> bool:
 
 import traceback, functools, os, sys
 
+# def thread_guard(func):
+#     @functools.wraps(func)
+#     def wrapper(*args, **kwargs):
+#         if in_debug_mode():
+#             return func(*args, **kwargs)
+#         try:
+#             return func(*args, **kwargs)
+#         except Exception as e:
+#             print(f"Exception in {func.__name__}: {e}")
+#             traceback.print_exc()
+#             os._exit(1)
+#     return wrapper
+
 def thread_guard(func):
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if in_debug_mode():
-            return func(*args, **kwargs)
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            print(f"Exception in {func.__name__}: {e}")
-            traceback.print_exc()
-            os._exit(1)
+        return func(*args, **kwargs)
     return wrapper
 
 

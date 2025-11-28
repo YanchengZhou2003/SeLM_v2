@@ -6,14 +6,57 @@ from typing import Dict, Optional
 import torch
 
 from src.utils import make_splits
+import signal
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+def handle_sigint(signum, frame):
+    # 这里可以打印一句话，但不要做复杂逻辑
+    print("\nForce exiting on Ctrl+C", flush=True)
+    os._exit(1)  # 直接让进程立即退出
+
+signal.signal(signal.SIGINT, handle_sigint)
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,3,4,5"
 main_device = torch.device('cuda:0')
 devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 num_devices = len(devices)
 
-defa_streams = [torch.cuda.default_stream(i) for i in range(torch.cuda.device_count())]
-data_streams = [torch.cuda.Stream(0) for _ in range(torch.cuda.device_count())]
+# 每个 device 一个 compute stream
+comp_streams  = [torch.cuda.Stream(device=i) for i in range(num_devices)]
+# read / write stream 都在 cuda:0
+read_streams  = [torch.cuda.Stream(device=0) for _ in range(num_devices)]
+write_streams = [torch.cuda.Stream(device=0) for _ in range(num_devices)]
+
+
+
+########## 线程保护机制 ##########
+import threading
+import signal
+import sys
+import traceback
+
+# 1. 主线程未捕获异常 -> 直接退出
+def fatal_excepthook(exc_type, exc, tb):
+    print("FATAL UNCAUGHT EXCEPTION:", exc_type.__name__, exc, flush=True)
+    traceback.print_tb(tb)
+    os._exit(1)
+sys.excepthook = fatal_excepthook
+
+# 2. 子线程未捕获异常 -> 直接退出
+def thread_excepthook(args: threading.ExceptHookArgs):
+    print(f"FATAL EXCEPTION IN THREAD {args.thread.name}:",
+          args.exc_type.__name__, args.exc_value, flush=True)
+    traceback.print_tb(args.exc_traceback)
+    os._exit(1)
+threading.excepthook = thread_excepthook
+
+# 3. 信号：Ctrl+C / TERM
+def fatal_signal(signum, frame):
+    print(f"FATAL SIGNAL {signum}, force exiting.", flush=True)
+    os._exit(1)
+
+signal.signal(signal.SIGINT,  fatal_signal)  # Ctrl+C
+signal.signal(signal.SIGTERM, fatal_signal)  # kill <pid>
+
 
 parser = argparse.ArgumentParser(description="Set hyperparameters for the model.")
 ### 1. GPT 训练相关参数
@@ -69,6 +112,8 @@ parser.add_argument("--vis_interval"      , type=int,   default=100 ,  help="")
 parser.add_argument("--vis_path"          , type=str,   default='./vis/tmp' , help="")
 parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
 parser.add_argument("--use_filter"        , type=int,   default=0    , help="")
+
+parser.add_argument("--prefetch"          , type=int,   default=1    , help="")
 
 args = parser.parse_args()
 
@@ -149,8 +194,6 @@ vocab4sid         = [list(range(sid, num_vocab_blocks, num_devices)) for sid in 
 valid4sid         = [list(range(sid, num_valid_blocks, num_devices)) for sid in range(num_devices)]
 
 
-
-
 # 超参数：训练相关
 train_converge    = args.train_converge    # 50
 valid_converge    = args.valid_converge    # 50
@@ -180,6 +223,8 @@ valid_only      = args.valid_only        # 0
 
 generators = {}
 main_generator = torch.Generator(device=main_device)
+
+prefetch        = args.prefetch          # 1
 
 
 def set_seed(seed: int = 42, deterministic: bool = True, benchmark: bool = False) -> None:
