@@ -574,6 +574,6 @@ if __name__ == "__main__":
     
     main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     
-    print("Finished GPT training and evaluation.")
-    print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    # print("Finished GPT training and evaluation.")
+    # print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                  
