@@ -3,7 +3,7 @@ from tokenizers.normalizers import NFKC, Sequence
 import os
 import json
 
-vs = 8192
+vs = 65
 
 class MultilingualBPETokenizer:
     def __init__(self, vocab_size=vs):
@@ -67,24 +67,24 @@ class MultilingualBPETokenizer:
     def save(self, directory):
         """保存分词器到指定目录"""
         os.makedirs(directory, exist_ok=True)
-        self.tokenizer.save(f"{directory}/tokenizer.json")
+        self.tokenizer.save(f"{directory}/tokenizer_voc{self.vocab_size}.json")
         
         # 保存配置
         config = {
             "vocab_size": self.vocab_size,
             "special_tokens": self.special_tokens
         }
-        with open(f"{directory}/config.json", "w", encoding="utf-8") as f:
+        with open(f"{directory}/config_voc{self.vocab_size}.json", "w", encoding="utf-8") as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
             
         print(f"分词器已保存到 {directory}/")
     
     def load(self, directory):
         """从指定目录加载分词器"""
-        self.tokenizer = Tokenizer.from_file(f"{directory}/tokenizer.json")
+        self.tokenizer = Tokenizer.from_file(f"{directory}/tokenizer_voc{vs}.json")
         
         # 加载配置
-        with open(f"{directory}/config.json", "r", encoding="utf-8") as f:
+        with open(f"{directory}/config_voc{vs}.json", "r", encoding="utf-8") as f:
             config = json.load(f)
             self.vocab_size = config.get("vocab_size", vs)
             self.special_tokens = config.get("special_tokens", ["<|endoftext|>", "<|unk|>", "<|pad|>"])
@@ -146,12 +146,12 @@ if __name__ == "__main__":
     language_files = ["./data/input.txt"]
     
     
-    if os.path.exists("./tokenizer/tokenizer.json"):
+    if os.path.exists(f"./tokenizer/tokenizer_voc{vs}.json"):
         print("检测到已存在的分词器，直接加载...")
-        tokenizer.load("./tokenizer")
+        tokenizer.load(f"./tokenizer")
     else:
         tokenizer.train(language_files)
-        tokenizer.save("./tokenizer")
+        tokenizer.save(f"./tokenizer")
     
     # 5. 测试编码和解码函数
     test_texts = [

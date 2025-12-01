@@ -792,36 +792,55 @@ class CritiGraph(torch.nn.Module):
     def valid_dyn_blocks(self, sid: int):
         device = devices[sid]
 
+        read_stream  = read_streams[sid]
+        comp_stream  = comp_streams[sid]
+        write_stream = write_streams[sid]
+
+        # 初始化 prefetch+1 个已完成事件（用于 pipeline 起始）
+        prev_write_done_list = []
+        for _ in range(prefetch + 1):
+            e = torch.cuda.Event(enable_timing=False, blocking=False)
+            e.record(read_stream)  # 此刻 read_stream 为空 → event立即完成
+            prev_write_done_list.append(e)
+
+        # 遍历 valid blocks
         for valid_block_id in valid4sid[sid]:
+
             valid_block = valid_blocks[valid_block_id]
             valid_slice = slice(valid_block[0], valid_block[1])
-            
-            ### step.1 准备数据
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                _dyn_idx = self.valid_sampler.get_connection(valid_block)
-                                                                             # (T_valid, N_dynbr)
-                _sta_loc = self.valid_locations[valid_slice]                 # (T_valid, dim_ct)
-                _pos_loc = self.train_locations[_dyn_idx]                    # (T_valid, N_dynbr, dim_ct)
 
-                _sta_emb = self.valid_emb[valid_slice]                       # (T_valid, dim_eu)
-                _pos_emb = self.train_emb[_dyn_idx]                          # (T_valid, N_dynbr, dim_eu)
-                
+            # ======================================================
+            # Step 1: READ (cuda:0, read_stream)
+            # ======================================================
+            with torch.cuda.device(main_device), torch.cuda.stream(read_stream):
+
+                # 限制 read 的最大超前
+                read_stream.wait_event(prev_write_done_list[0])
+
+                _dyn_idx = self.valid_sampler.get_connection(valid_block)  # (T_valid, N_dynbr)
+
+                _sta_loc = self.valid_locations[valid_slice]
+                _pos_loc = self.train_locations[_dyn_idx]
+
+                _sta_emb = self.valid_emb[valid_slice]
+                _pos_emb = self.train_emb[_dyn_idx]
+
                 data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
-                data_ready_event.record(data_streams[sid])
+                data_ready_event.record(read_stream)
 
-            ### step.2 计算 loss 并选择最佳位置
-            with torch.cuda.device(device), torch.cuda.stream(defa_streams[sid]):
-                defa_streams[sid].wait_event(data_ready_event)
-                
-                sta_loc, pos_loc, sta_emb, pos_emb = (
-                    _sta_loc.to(device, non_blocking=True),
-                    _pos_loc.to(device, non_blocking=True),
-                    _sta_emb.to(device, non_blocking=True),
-                    _pos_emb.to(device, non_blocking=True),
-                )
-                
-                cnc_loc   = self.connection(sta_loc, dev_num=sid)
-                # mask      = self.converge_mask(T_valid, N_nbr, sid)
+            # ======================================================
+            # Step 2: COMPUTE (cuda:sid, comp_stream)
+            # ======================================================
+            with torch.cuda.device(device), torch.cuda.stream(comp_stream):
+
+                comp_stream.wait_event(data_ready_event)
+
+                sta_loc = _sta_loc.to(device, non_blocking=True)
+                pos_loc = _pos_loc.to(device, non_blocking=True)
+                sta_emb = _sta_emb.to(device, non_blocking=True)
+                pos_emb = _pos_emb.to(device, non_blocking=True)
+
+                cnc_loc = self.connection(sta_loc, dev_num=sid)
 
                 loss_dyn_dyn, _ = self.loom_dyn(
                     None,
@@ -831,22 +850,33 @@ class CritiGraph(torch.nn.Module):
                     None, sid,
                     "valid"
                 )
-                
+
                 loss_total = loss_dyn_dyn
-                
+
                 selected_locs, dyn_dyn_loss, _, _ = self.get_best_loc(
                     cnc_loc, loss_total, None, None, sid
-                ) # (T_valid, ), (T_valid, dim_ct)
-                
+                )
+
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
-                comp_ready_event.record(defa_streams[sid])
-            
-            ### step.3 将结果写回主存
-            with torch.cuda.device(0), torch.cuda.stream(data_streams[sid]):
-                data_streams[sid].wait_event(comp_ready_event)
-                
+                comp_ready_event.record(comp_stream)
+
+            # ======================================================
+            # Step 3: WRITE (cuda:0, write_stream)
+            # ======================================================
+            with torch.cuda.device(main_device), torch.cuda.stream(write_stream):
+
+                write_stream.wait_event(comp_ready_event)
+
                 self.new_valid_locations[valid_slice] = selected_locs.to(main_device, non_blocking=True)
-                self.tot_dyn_loss       [valid_slice] = dyn_dyn_loss.to(main_device, non_blocking=True)
+                self.tot_dyn_loss      [valid_slice] = dyn_dyn_loss.to(main_device, non_blocking=True)
+
+                # 更新写完成事件窗口
+                write_done_event = torch.cuda.Event(enable_timing=False, blocking=False)
+                write_done_event.record(write_stream)
+
+                prev_write_done_list.pop(0)
+                prev_write_done_list.append(write_done_event)
+
 
     @thread_guard
     def train_epoch(self, sid: int):
@@ -997,6 +1027,17 @@ class CritiGraph(torch.nn.Module):
             ### step 3.6: 可视化
             if cur_epoch % vis_interval == 0 or cur_epoch == train_epoch_num - 1:
                 self.visualize(cur_epoch, "train")
+            
+            ### step 3.7: 保存
+            if (cur_epoch + 1) % save_interval == 0:
+                torch.save( 
+                    {
+                        "train_locations": self.train_locations.cpu(),
+                        "expander_graph" : self.train_sampler.expander_graph.cpu(),
+                        "vocab_locations": self.vocab_locations.cpu(),
+                    },
+                    train_save_path.replace(".pt", f"_epoch{cur_epoch + 1}.pt")
+                )
 
         
         for thread in threads:
@@ -1022,14 +1063,15 @@ class CritiGraph(torch.nn.Module):
         valid_emb : torch.Tensor, # (N_train, dim)
         valid_top : torch.Tensor, # (N_valid, *)
         vocab_emb : torch.Tensor, # (N_vocab, dim)
-        valid_tar : torch.Tensor, # (N_train, )  
+        valid_tar : torch.Tensor, # (N_train, ) 
+        train_epoch: int,
     ):
         mark(ST, "all")
         mark(ST, "all_preparation")
         
         ### step.2 准备数据分块与采样器
         mark(ST, "all_preparation_2")
-        train_data         = torch.load(train_save_path)
+        train_data         = torch.load(train_save_path.replace(".pt", f"_epoch{train_epoch}.pt"))
         
         self.train_emb     = train_emb.to(main_device)
         self.valid_emb     = valid_emb.to(main_device)

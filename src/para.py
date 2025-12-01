@@ -15,7 +15,7 @@ def handle_sigint(signum, frame):
 
 signal.signal(signal.SIGINT, handle_sigint)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,3,4,5"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
 main_device = torch.device('cuda:0')
 devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 num_devices = len(devices)
@@ -91,6 +91,7 @@ parser.add_argument("--c"                 , type=float, default=1.0 ,  help="")
 
 parser.add_argument("--train_epoch_num"   , type=int,   default=500,   help="")
 parser.add_argument("--valid_epoch_num"   , type=int,   default=500,   help="")
+parser.add_argument("--save_interval"     , type=int,   default=100,   help="")
 
 parser.add_argument("--temperature"       , type=float, default=10. , help="")
 
@@ -195,8 +196,9 @@ valid4sid         = [list(range(sid, num_valid_blocks, num_devices)) for sid in 
 
 
 # 超参数：训练相关
-train_converge    = args.train_converge    # 50
-valid_converge    = args.valid_converge    # 50
+train_converge    = args.train_converge    # 500
+valid_converge    = args.valid_converge    # 500
+save_interval     = args.save_interval     # 100
 
 ratio_dyn         = args.ratio_dyn         # 0.1
 ratio_sta         = 1.0 - ratio_dyn

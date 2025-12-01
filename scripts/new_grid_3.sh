@@ -1,9 +1,9 @@
 cnt=0
 
-for N in 8192 16384; do
-    for tp in 3 9 15; do
+for N in 8192 16384 32768 65536; do
+    for tp in 15 9 3; do
         for pos_ratio in 0.125 0.5 0.875; do
-            for ratio_dyn in 0.80 0.82 0.84 0.86 0.88 0.90 0.92 0.94 0.96 0.98; do
+            for ratio_dyn in 0.70 0.73 0.76 0.79 0.82 0.85 0.88 0.91 0.94 0.97; do
                 block_size=512
                 echo "Running experiment with N=$N, tp=$tp, pos_ratio=$pos_ratio, ratio_dyn=$ratio_dyn"
                 python -m src.gpt  \
@@ -23,13 +23,9 @@ for N in 8192 16384; do
                     --vis_path ./vis/vis_ICML_322/N${N}_tp${tp}_ratio${ratio_dyn}_pos${pos_ratio}/ \
                     --use_filter 0 \
                     --train_save_path ./ckpt/cte/N${N}_tp${tp}_ratio${ratio_dyn}_pos${pos_ratio}.pt \
-                    > ./logs/log_ICML3/N${N}_tp${tp}_ratio${ratio_dyn}_pos${pos_ratio}.log 2>&1 &
+                    > ./logs/log_ICML3/N${N}_tp${tp}_ratio${ratio_dyn}_pos${pos_ratio}.log 2>&1
                 
-                cnt=$((cnt+1))
-                if [ $cnt -eq $max_cnt ]; then
-                    cnt=0
-                    wait
-                fi
+                wait
 
                 echo "Experiment with N=$N, tp=$tp, pos_ratio=$pos_ratio, ratio_dyn=$ratio_dyn completed."
             done

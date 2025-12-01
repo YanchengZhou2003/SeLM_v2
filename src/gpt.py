@@ -24,10 +24,10 @@ from src.para import *
 from src.utils import *
 from src.vis import *
 
-# from src.tokenizer import MultilingualBPETokenizer
+from src.tokenizer import MultilingualBPETokenizer
 
-# tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
-# tokenizer.load("./tokenizer")   # 已经训练好并保存过
+tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
+tokenizer.load("./tokenizer")   # 已经训练好并保存过
 
 ## ====== 数据加载 ======
 ## 注意：这里 text 是完整语料字符串
@@ -543,9 +543,12 @@ def main_cte(
             train_emb, train_top, vocab_emb, train_y
         )
     if not train_only:
-        cte.valid_all(
-            train_emb, valid_emb, valid_top, vocab_emb, valid_y,
-        )
+        for i in range(train_epoch_num // save_interval):
+            train_epoch = (i + 1) * save_interval
+            print(f"CTE Training: Starting validation after {train_epoch} epochs...")
+            cte.valid_all(
+                train_emb, valid_emb, valid_top, vocab_emb, valid_y, train_epoch
+            )
 
 
         
@@ -575,11 +578,6 @@ if __name__ == "__main__":
         traceback.print_exc()
         os._exit(1)
     
-<<<<<<< HEAD
-    main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
-    
-=======
->>>>>>> efa4b3170c37c95e51f5f742db2f71e4a1fc172a
     print("Finished GPT training and evaluation.")
     print("Current Time:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                  
