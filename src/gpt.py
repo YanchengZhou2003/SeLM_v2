@@ -19,47 +19,53 @@ warnings.filterwarnings(
     message=r"You are using `torch\.load` with `weights_only=False`"
 )
 
-from src.cte import *
-from src.para import *
+from src.cte   import *
+from src.para  import *
 from src.utils import *
-from src.vis import *
+from src.vis   import *
 
-from src.tokenizer import MultilingualBPETokenizer
+## ========= 数据加载：更多 Tokens =========
+if N_vocab > 65:
+    from src.tokenizer import MultilingualBPETokenizer
 
-tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
-tokenizer.load("./tokenizer")   # 已经训练好并保存过
+    tokenizer = MultilingualBPETokenizer(vocab_size=N_vocab)
+    tokenizer.load("./tokenizer")   # 已经训练好并保存过
 
-## ====== 数据加载 ======
-## 注意：这里 text 是完整语料字符串
-# with open('./data/input.txt', 'r', encoding='utf-8') as f:
-#     text = f.read()
-# data_ids = tokenizer.encoding(text)              # 列表[int]
-# data = torch.tensor(data_ids, dtype=torch.long, pin_memory=True)
+    ## ====== 数据加载 ======
+    ## 注意：这里 text 是完整语料字符串
+    with open('./data/input.txt', 'r', encoding='utf-8') as f:
+        text = f.read()
+    data_ids = tokenizer.encoding(text)              # 列表[int]
+    data = torch.tensor(data_ids, dtype=torch.long, pin_memory=True)
 
-# text_size = len(data)
-# n = int(0.9 * text_size)
-# train_data = data[:n]
-# val_data = data[n:]
+    text_size = len(data)
+    n = int(0.9 * text_size)
+    train_data = data[:n]
+    val_data = data[n:]
+elif N_vocab == 65:
+    ## ====== 数据加载: 65 Tokens ======
+    with open('./data/input.txt', 'r', encoding='utf-8') as f:
+        text = f.read()
 
-with open('./data/input.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
+    chars = sorted(list(set(text)))
+    vocab_size = len(chars)    
 
-chars = sorted(list(set(text)))
-vocab_size = len(chars)    
+    # create a mapping from characters to integers
+    stoi = { ch:i for i,ch in enumerate(chars) }
+    itos = { i:ch for i,ch in enumerate(chars) }
+    encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
+    decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
 
-# create a mapping from characters to integers
-stoi = { ch:i for i,ch in enumerate(chars) }
-itos = { i:ch for i,ch in enumerate(chars) }
-encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
-decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
+    # ====== Train and test splits ======
+    data = torch.tensor(encode(text), dtype=torch.long, pin_memory=True)
+    text_size = len(data)
+    datai = torch.tensor([i * block_size for i in range(text_size)], dtype=torch.long)
+    n = int(0.9 * text_size) # first 90% will be train, rest val
+    train_data = data[:n]
+    val_data   = data[n:]
+else:
+    raise ValueError("N_vocab must be either 65 or greater than 65.")
 
-# Train and test splits
-data = torch.tensor(encode(text), dtype=torch.long, pin_memory=True)
-text_size = len(data)
-# datai = torch.tensor([i * block_size for i in range(text_size)], dtype=torch.long)
-n = int(0.9*text_size) # first 90% will be train, rest val
-train_data = data[:n]
-val_data   = data[n:]
 
 
 # data loading
@@ -451,29 +457,151 @@ def get_cte_train_and_test_by_ratio(gpt_ckpt: str, train_cache_path: str, valid_
     train_cache_length = train_cache['emb'].shape[0] 
     eval_cache_length = eval_cache['emb'].shape[0]
     
-    ### step 4: 可视化 loss 的分布
-    # train_last_token_loss = torch.cat(train_last_token_loss, dim=0).numpy()
-    # valid_last_token_loss = torch.cat(valid_last_token_loss, dim=0).numpy()
+    ###################################################################################
     
-    # fig, ax1 = plt.subplots()
     
-    # # Train loss histogram on left y-axis
-    # ax1.hist(train_last_token_loss, bins=50, alpha=0.5, color='blue', label='Train Last Token Loss')
-    # ax1.set_xlim((0, 1.5))
-    # ax1.set_xlabel('Loss')
-    # ax1.set_ylabel('Train Frequency', color='blue')
-    # ax1.tick_params(axis='y', labelcolor='blue')
+    ### step 4: 可视化输出层熵 + bin accuracy（train vs valid）
+
+    import numpy as np
+    import torch.nn.functional as F
+    import matplotlib.pyplot as plt
+
+    def compute_entropy(logits: torch.Tensor) -> torch.Tensor:
+        # logits: (B, V)
+        prob = torch.softmax(logits, dim=-1)
+        entropy = -(prob * prob.log()).sum(dim=-1)   # (B,)
+        return entropy.cpu()
+
+    # ======================================
+    # 工具函数：分 bin 统计 accuracy，并绘制
+    # ======================================
+    def plot_entropy_with_accuracy(entropies, correctness, filename, title, color):
+        """
+        entropies:   (N,) numpy
+        correctness: (N,) numpy，0/1
+        """
+        plt.figure(figsize=(8, 5))
+        
+        # 绘图并得到 bins
+        counts, bin_edges, patches = plt.hist(
+            entropies, bins=15, alpha=0.5, density=True, label=title, color=color
+        )
+
+        # 每个 bin 的 accuracy
+        bin_acc = []
+        for i in range(len(bin_edges) - 1):
+            lo, hi = bin_edges[i], bin_edges[i + 1]
+            mask = (entropies >= lo) & (entropies < hi)
+            if mask.sum() > 0:
+                acc = correctness[mask].mean()
+            else:
+                acc = float('nan')
+            bin_acc.append(acc)
+
+        # 在柱子顶部标注 accuracy
+        for i, patch in enumerate(patches):
+            acc = bin_acc[i]
+            if not np.isnan(acc):
+                x = patch.get_x() + patch.get_width() / 2
+                y = patch.get_height()
+                plt.text(
+                    x, y,
+                    f"{acc:.2f}",
+                    ha='center', va='bottom', fontsize=8
+                )
+
+        plt.xlabel("Entropy of output distribution")
+        plt.ylabel("Density")
+        plt.title(title)
+        plt.tight_layout()
+        plt.ylim(0.0, 0.85)
+        plt.savefig(filename)
+        plt.close()
+
+    # ======================================
+    # 重新迭代 train/valid，收集 entropy + correctness
+    # ======================================
+
+    train_entropy_list = []
+    train_correct_list = []
+
+    train_num = 0
+    while train_num < train_cache_length:
+        X_train, Y_train, _ = get_batch('train', to_cuda=True)
+        with torch.no_grad():
+            # dyn_emb
+            _, dyn_emb, _, _ = model(X_train, targets=Y_train, return_dyn_loss=True)
+            dyn_emb = dyn_emb[:, -1, :]     # (B, E)
+            sta_emb = model.token_embedding_table.weight   # (V, E)
+
+            # logits
+            logits = 20. * F.normalize(dyn_emb, dim=-1) @ F.normalize(sta_emb, dim=-1).t()  # (B, V)
+
+            # entropy
+            H = compute_entropy(logits)                   # (B,)
+            train_entropy_list.append(H)
+
+            # correctness
+            pred = logits.argmax(dim=-1).cpu()            # (B,)
+            correct = (pred == Y_train[:, -1].cpu()).float()
+            train_correct_list.append(correct)
+
+            train_num += H.shape[0]
+
+
+    valid_entropy_list = []
+    valid_correct_list = []
+
+    valid_num = 0
+    while valid_num < eval_cache_length:
+        X_val, Y_val, _ = get_batch('val', to_cuda=True)
+        with torch.no_grad():
+            _, dyn_emb, _, _ = model(X_val, targets=Y_val, return_dyn_loss=True)
+            dyn_emb = dyn_emb[:, -1, :]
+            sta_emb = model.token_embedding_table.weight
+
+            logits = 20. * F.normalize(dyn_emb, dim=-1) @ F.normalize(sta_emb, dim=-1).t()
+
+            H = compute_entropy(logits)
+            valid_entropy_list.append(H)
+
+            pred = logits.argmax(dim=-1).cpu()
+            correct = (pred == Y_val[:, -1].cpu()).float()
+            valid_correct_list.append(correct)
+
+            valid_num += H.shape[0]
+
+
+    # ======================================
+    # 拼接为 numpy
+    # ======================================
+    train_entropy = torch.cat(train_entropy_list, dim=0)[:train_cache_length].numpy()
+    valid_entropy = torch.cat(valid_entropy_list, dim=0)[:eval_cache_length].numpy()
+
+    train_correctness = torch.cat(train_correct_list, dim=0)[:train_cache_length].numpy()
+    valid_correctness = torch.cat(valid_correct_list, dim=0)[:eval_cache_length].numpy()
+
+    # ======================================
+    # 绘图：train + valid
+    # ======================================
+    plot_entropy_with_accuracy(
+        train_entropy, train_correctness,
+        filename=f'entropy_distribution_train{train_cache_length}.png',
+        title="Output-layer entropy distribution (train)",
+        color='blue'
+    )
+
+    plot_entropy_with_accuracy(
+        valid_entropy, valid_correctness,
+        filename=f'entropy_distribution_valid{eval_cache_length}.png',
+        title="Output-layer entropy distribution (valid)",
+        color='red'
+    )
+
     
-    # # Valid loss histogram on right y-axis
-    # ax2 = ax1.twinx()
-    # ax2.hist(valid_last_token_loss, bins=50, alpha=0.5, color='red', label='Valid Last Token Loss')
-    # ax2.set_ylabel('Valid Frequency', color='red')
-    # ax2.tick_params(axis='y', labelcolor='red')
     
-    # plt.title('Distribution of Last Token Loss')
-    # fig.tight_layout()
-    # plt.savefig(f'last_token_loss_distribution_ori{train_last_token_loss.shape[0]}_cur{train_cache_length}.png')
-    # plt.close()
+    
+    #############################################################################
     
     print(f"train cache length: {train_cache_length}, eval cache length: {eval_cache_length}")
     save_file(train_cache, os.path.join(cache_path, train_cache_path))
@@ -538,7 +666,8 @@ def main_cte(
 
     #### step 3.2: CTE 训练与测试
 
-    if not valid_only:
+    if not valid_only and not os.path.exists(train_save_path.replace(".pt", f"_epoch{train_epoch_num}.pt")):
+        print("Not Found trained CTE model, start training...")
         cte.train_all(
             train_emb, train_top, vocab_emb, train_y
         )
@@ -562,15 +691,24 @@ if __name__ == "__main__":
     #     print(f"Evaluating GPT at iters={iters}")
     #     eval_gpt(gpt_ckpt.format(iters))
     
-    best_valid_epoch = 9999
+    best_valid_epochs = {
+        65 :  9999,
+        384:  3000,
+        512:  2000,
+        768:  2000,
+        1024: 2000
+    }
+    best_valid_epoch = best_valid_epochs.get(N_vocab, None)
+    if best_valid_epoch is None:
+        raise ValueError(f"No best valid epoch found for N_vocab={N_vocab}")
     gpt_ckpt = gpt_ckpt.format(best_valid_epoch)
+    
     # train_cache_ckpt = gpt_ckpt.replace(".pth", "") + f"_ps{pos_ratio}_train{N_train}_cache_last.pth"
     # valid_cache_ckpt = gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
-    
     # get_cte_train_and_test_by_ratio(gpt_ckpt, train_cache_ckpt, valid_cache_ckpt)
     
     train_cache_ckpt = f"rk{N_top}_" + gpt_ckpt.replace(".pth", "") + f"_ps{pos_ratio}_train{N_train}_cache_last.pth"
-    valid_cache_ckpt = f"rk{N_top}_" + f"q=ps{pos_ratio}_train{N_train}_" + gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
+    valid_cache_ckpt = f"rk{N_top_v}_" + f"q=ps{pos_ratio}_train{N_train}_" + gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
     try:
         main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     except Exception as e:

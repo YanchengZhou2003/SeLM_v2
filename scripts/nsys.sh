@@ -1,0 +1,30 @@
+nsys profile \
+    --trace=cuda,osrt,nvtx \
+    --trace-fork-before-exec=true \
+    --sample=cpu \
+    --cpuctxsw=process-tree \
+    --cuda-memory-usage=true \
+    --cuda-graph-trace=node \
+    --show-output=true \
+    --cudabacktrace=all \
+    --force-overwrite=true \
+    -o cte_multigpu \
+    python -m src.gpt  \
+        --N_train 32768  --T_train 512  \
+        --N_vocab 512    --T_vocab 512  \
+        --N_valid 2048   --T_valid 512  \
+        --N_dynbr 512    --N_top   256   \
+        --N_dynbr_v 512  --N_top_v 256   \
+        --N_stnbr   512  --pos_ratio 0.5 \
+        --ratio_dyn 0.25 --ratio_sta 0.25 --step_dyn 1 \
+        --h 12           --tp 8           --c 0.8 --cur_tp 3 --cur_portion 0.75 \
+        --train_epoch_num 3    --valid_epoch_num 60          \
+        --train_converge 0      --valid_converge 0            \
+        --train_graph_reset 1   --valid_graph_reset 1         \
+        --train_only 1   --valid_only   0 \
+        --val_interval 10 --vis_interval 20 \
+        --use_eu_norm 0  --temperature 10 --gt_temperature 1  \
+        --save_interval 60 \
+        --vis_path    ./vis/tmp \
+        --use_filter  0 \
+        --train_save_path ./ckpt/tmp.ckpt 

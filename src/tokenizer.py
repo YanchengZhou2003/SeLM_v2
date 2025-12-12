@@ -3,7 +3,7 @@ from tokenizers.normalizers import NFKC, Sequence
 import os
 import json
 
-vs = 65
+vs = 1024
 
 class MultilingualBPETokenizer:
     def __init__(self, vocab_size=vs):
@@ -13,8 +13,8 @@ class MultilingualBPETokenizer:
         参数:
             vocab_size: 词汇表大小
         """
-        self.vocab_size = vocab_size
-        self.tokenizer = None
+        self.vocab_size     = vocab_size
+        self.tokenizer      = None
         self.special_tokens = ["<|endoftext|>", "<|unk|>", "<|pad|>"]
         
     def train(self, file_patterns):
@@ -81,12 +81,13 @@ class MultilingualBPETokenizer:
     
     def load(self, directory):
         """从指定目录加载分词器"""
-        self.tokenizer = Tokenizer.from_file(f"{directory}/tokenizer_voc{vs}.json")
+        self.tokenizer = Tokenizer.from_file(f"{directory}/tokenizer_voc{self.vocab_size}.json")
         
         # 加载配置
-        with open(f"{directory}/config_voc{vs}.json", "r", encoding="utf-8") as f:
+        with open(f"{directory}/config_voc{self.vocab_size}.json", "r", encoding="utf-8") as f:
             config = json.load(f)
-            self.vocab_size = config.get("vocab_size", vs)
+            vs = config.get("vocab_size")
+            assert vs == self.vocab_size, "加载的分词器词汇表大小与初始化不匹配"
             self.special_tokens = config.get("special_tokens", ["<|endoftext|>", "<|unk|>", "<|pad|>"])
             
         print(f"分词器已加载，词汇表大小: {self.tokenizer.get_vocab_size()}")

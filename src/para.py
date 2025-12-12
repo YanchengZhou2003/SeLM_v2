@@ -15,7 +15,7 @@ def handle_sigint(signum, frame):
 
 signal.signal(signal.SIGINT, handle_sigint)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4,5,6,7"
 main_device = torch.device('cuda:0')
 devices = [torch.device(f"cuda:{i}") for i in range(torch.cuda.device_count())]
 num_devices = len(devices)
@@ -66,27 +66,33 @@ parser = argparse.ArgumentParser(description="Set hyperparameters for the model.
 # parser.add_argument("--cte_eval_iters"    , type=int,   default=1,     help="")
 
 parser.add_argument("--N_top"             , type=int,   default=256  , help="")
+parser.add_argument("--N_top_v"           , type=int,   default=256  , help="")
+
 parser.add_argument("--pos_ratio"         , type=float  , default=0.5,   help="")
 
 parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
 parser.add_argument("--T_train"           , type=int,   default=128,   help="")
 
-parser.add_argument("--N_vocab"           , type=int,   default=65   , help="")
-parser.add_argument("--T_vocab"           , type=int,   default=65 ,   help="")
+parser.add_argument("--N_vocab"           , type=int,   default=512   , help="")
+parser.add_argument("--T_vocab"           , type=int,   default=512 ,   help="")
 
 parser.add_argument("--N_valid"           , type=int,   default=2048,  help="")
 parser.add_argument("--T_valid"           , type=int,   default=128,   help="")
 
-parser.add_argument("--N_dynbr"           , type=int,   default=325,   help="") # 65, 130, 195, 260, 325, 390, 455
-parser.add_argument("--N_stnbr"           , type=int,   default=65,    help="") # 1 , 2  , 3  , 4  , 5  , 6  , 7
+parser.add_argument("--N_dynbr"           , type=int,   default=325,   help="") 
+parser.add_argument("--N_stnbr"           , type=int,   default=65,    help="") 
+
+parser.add_argument("--N_dynbr_v"         , type=int,   default=325,   help="") 
 
 parser.add_argument("--ratio_dyn"         , type=float, default=0.1,    help="")
+parser.add_argument("--ratio_sta"         , type=float, default=0.9,    help="")
 parser.add_argument("--step_dyn"          , type=int,   default=1,     help="")
 
 parser.add_argument("--h"                 , type=int,   default=18 ,   help="")
 parser.add_argument("--tp"                , type=int,   default=16 ,   help="")
 parser.add_argument("--cur_tp"            , type=int,   default=2  ,   help="")
 parser.add_argument("--cur_portion"       , type=float, default=0.5 ,  help="")
+parser.add_argument("--cur_num"           , type=int,   default=1 ,  help="")
 parser.add_argument("--c"                 , type=float, default=1.0 ,  help="")
 
 parser.add_argument("--train_epoch_num"   , type=int,   default=500,   help="")
@@ -94,6 +100,7 @@ parser.add_argument("--valid_epoch_num"   , type=int,   default=500,   help="")
 parser.add_argument("--save_interval"     , type=int,   default=100,   help="")
 
 parser.add_argument("--temperature"       , type=float, default=10. , help="")
+parser.add_argument("--gt_temperature"    , type=float, default=None ,help="")
 
 parser.add_argument("--train_converge"    , type=int,   default=50 ,   help="")
 parser.add_argument("--valid_converge"    , type=int,   default=50 ,   help="")
@@ -114,7 +121,7 @@ parser.add_argument("--vis_path"          , type=str,   default='./vis/tmp' , he
 parser.add_argument("--use_eu_norm"       , type=int,   default=0    , help="")
 parser.add_argument("--use_filter"        , type=int,   default=0    , help="")
 
-parser.add_argument("--prefetch"          , type=int,   default=1    , help="")
+parser.add_argument("--prefetch"          , type=int,   default=3    , help="")
 
 args = parser.parse_args()
 
@@ -156,11 +163,13 @@ eps               = 1e-5
 sample_k          = 1
 cur_tp            = args.cur_tp            # 2
 cur_portion       = args.cur_portion       # 0.5
+cur_num           = args.cur_num           # 1
 use_eu_norm       = args.use_eu_norm       # 1
 use_filter        = args.use_filter        # 0
 
 # 超参数：数据集，及其分块
 N_top             = args.N_top          # 256
+N_top_v           = args.N_top_v        # 256
 pos_ratio         = args.pos_ratio        # 0.5
 
 N_train           = args.N_train           # 65536
@@ -174,6 +183,7 @@ N_valid           = args.N_valid           # 8192
 T_valid           = args.T_valid           # 256
 
 N_dynbr           = args.N_dynbr           # 
+N_dynbr_v         = args.N_dynbr_v         #
 N_stnbr           = args.N_stnbr           # 
 assert N_stnbr == N_vocab, f"N_stnbr 必须等于 N_vocab, 当前 {N_stnbr} != {N_vocab}"
 assert N_dynbr >= N_top, f"N_dynbr 必须大于等于 num_top, 当前 {N_dynbr} < {N_top}"
@@ -201,7 +211,9 @@ valid_converge    = args.valid_converge    # 500
 save_interval     = args.save_interval     # 100
 
 ratio_dyn         = args.ratio_dyn         # 0.1
-ratio_sta         = 1.0 - ratio_dyn
+ratio_sta         = args.ratio_sta         # 0.9
+ratio_gt          = 1.0 - ratio_dyn - ratio_sta
+print(f"Ratio - Dyn: {ratio_dyn}, Sta: {ratio_sta}, GT: {ratio_gt}")
 
 step_dyn          = args.step_dyn          # 1
 
@@ -209,6 +221,8 @@ train_epoch_num = args.train_epoch_num # 5
 valid_epoch_num = args.valid_epoch_num # 5
 
 temperature     = args.temperature       # 0.01
+gt_temperature  = args.gt_temperature if args.gt_temperature is not None else temperature  # 若未指定，则与 temperature 相同
+
 
 train_graph_reset = args.train_graph_reset # 50
 valid_graph_reset = args.valid_graph_reset # 50

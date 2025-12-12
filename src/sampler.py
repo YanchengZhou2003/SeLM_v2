@@ -103,7 +103,7 @@ class ValidSampler(BaseSample):
         """
         random_indices  = torch.randint(0, N_train, (N_valid,), device=main_device)
 
-        self.expander_graph = expander_graph.to(main_device)
+        self.expander_graph = torch.randint(0, N_train, (N_train, N_dynbr_v - N_top_v), device=main_device) # (N_train, N_dynbr - N_top)
         self.valid_top      = valid_top.to(main_device)
         self.dyn_graph      = torch.cat(
             [self.valid_top, self.expander_graph[random_indices]],

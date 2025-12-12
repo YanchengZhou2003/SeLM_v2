@@ -10,6 +10,30 @@ from scipy.spatial.distance import pdist, squareform
 
 from src.para import *
 
+def visualize_loss_hist(hist_tensor: torch.Tensor, name: str, num_bins: int = 100, save_path: str = None):
+    # hist_tensor 假设为大的 1000 bins；这里我们重采样到 num_bins
+    hist_np = hist_tensor.cpu().double().numpy()
+    L = len(hist_np)
+    if num_bins < L:
+        factor = L // num_bins
+        hist_np = hist_np[:factor * num_bins].reshape(num_bins, factor).sum(axis=1)
+    else:
+        # 如果 num_bins >= 原 bins，不插值，直接绘制
+        num_bins = L
+
+    xs = np.linspace(0, 1, num_bins)
+    plt.figure(figsize=(6,4))
+    plt.bar(xs, hist_np, width=1/num_bins, align="edge")
+    plt.title(f"Loss distribution: {name}")
+    plt.xlabel("loss value (clipped to [0,1])")
+    plt.ylabel("count")
+    plt.yscale("log")
+
+
+    if save_path is not None:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=150)
+    plt.show()
 
 def visualize_similarity(S_eu: np.ndarray, S_ct: np.ndarray, meta_name="", save_eu=True, loss_dyn_dyn=0.):
     sim_ct_path = os.path.join(vis_path, meta_name.format("", "ct"))
