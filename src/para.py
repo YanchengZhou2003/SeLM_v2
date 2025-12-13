@@ -188,6 +188,7 @@ N_stnbr           = args.N_stnbr           #
 assert N_stnbr == N_vocab, f"N_stnbr 必须等于 N_vocab, 当前 {N_stnbr} != {N_vocab}"
 assert N_dynbr >= N_top, f"N_dynbr 必须大于等于 num_top, 当前 {N_dynbr} < {N_top}"
 N_nbr             = N_dynbr + N_stnbr      # 
+N_nbr_v           = N_dynbr_v + N_stnbr  #
 
 train_blocks      = make_splits(0, N_train, T_train) 
 # vtnbr_blocks      = make_splits(0, N_train, T_vtnbr)

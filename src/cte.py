@@ -30,11 +30,13 @@ from typing import List, Tuple
 class TrainLossRecord:
     dyn_dyn_loss: float = 0.0
     dyn_sta_loss: float = 0.0
-    dyn_gt_loss : float = 0.0
     tot_dyn_loss: float = 0.0
     sta_sta_loss: float = 0.0
 
+@dataclass
 class ValidLossRecord:
+    dyn_dyn_loss: float = 0.0
+    dyn_sta_loss: float = 0.0
     tot_dyn_loss: float = 0.0
 
 class CritiGraph(torch.nn.Module):
@@ -284,7 +286,7 @@ class CritiGraph(torch.nn.Module):
         ct_val = ct_val_triton(
             cnc_loc.to(torch.int32).contiguous(),
             pos_loc.to(torch.int32).contiguous(),
-            torch.ones((T_train if cur_type=="train" else T_valid, N_nbr if cur_type=="train" else N_dynbr_v), device=device, dtype=torch.float32).contiguous(),
+            torch.ones((T_train if cur_type=="train" else T_valid, N_nbr if cur_type=="train" else N_nbr_v), device=device, dtype=torch.float32).contiguous(),
             cos_sta_pos.contiguous(),
             cos_sta_pos_sum.contiguous(),
             tp=float(self.tp),
@@ -330,27 +332,29 @@ class CritiGraph(torch.nn.Module):
             num, N_top, temperature, N_train
         ) # (T_train, N_C, dim_ct)
         
-        if cur_type == "train":
-            # loss_dyn_sta = (
-            #     torch.abs(ori_eu_val[:, num:, :, :] - ori_ct_val[:, num:, :, :]) * F.softmax(ori_eu_val[:, num:, :, :] * 20 / gt_temperature, dim=1)
-            # ).mean(dim=1)       
+    
+        loss_dyn_sta = (
+            ( F.log_softmax(eu_val[:, num:, :, :] * 20 / temperature, dim=1) 
+            - F.log_softmax(ct_val[:, num:, :, :] * 20 / temperature, dim=1)) * 
+                F.softmax(eu_val[:, num:, :, :]   * 20 / temperature, dim=1)
+        ).sum(dim=1)  # (T_train, N_C, dim_ct)
+        
+        # if cur_type == "train":
+        #     # loss_dyn_sta = (
+        #     #     torch.abs(ori_eu_val[:, num:, :, :] - ori_ct_val[:, num:, :, :]) * F.softmax(ori_eu_val[:, num:, :, :] * 20 / gt_temperature, dim=1)
+        #     # ).mean(dim=1)       
             
             
-            loss_dyn_sta = (
-                ( F.log_softmax(eu_val[:, num:, :, :] * 20 / gt_temperature, dim=1) 
-                - F.log_softmax(ct_val[:, num:, :, :] * 20 / gt_temperature, dim=1)) * 
-                  F.softmax(eu_val[:, num:, :, :]     * 20 / gt_temperature, dim=1)
-            ).sum(dim=1)  # (T_train, N_C, dim_ct)
             
-            # loss_dyn_gt = - F.log_softmax(ct_val[:, num:, :, :] * 20 / gt_temperature, dim=1).gather(
-            #     dim=1,
-            #     index=cur_tar[:, None, None, None].expand(-1, -1, N_C, tp)
-            # ).squeeze(1) # (T_train, N_C, dim_ct)
+        #     # loss_dyn_gt = - F.log_softmax(ct_val[:, num:, :, :] * 20 / gt_temperature, dim=1).gather(
+        #     #     dim=1,
+        #     #     index=cur_tar[:, None, None, None].expand(-1, -1, N_C, tp)
+        #     # ).squeeze(1) # (T_train, N_C, dim_ct)
             
-            loss_dyn_gt = torch.zeros_like(loss_dyn_sta)
-        else:
-            loss_dyn_sta = None
-            loss_dyn_gt  = None
+        #     # loss_dyn_gt = torch.zeros_like(loss_dyn_sta)
+        # else:
+        #     loss_dyn_sta = None
+        #     # loss_dyn_gt  = None
         
         # T = T_train if cur_type == "train" else T_valid
         # S = N_nbr if cur_type == "train" else N_dynbr
@@ -376,7 +380,7 @@ class CritiGraph(torch.nn.Module):
         # )
 
                                     
-        return loss_dyn_dyn, loss_dyn_sta, loss_dyn_gt
+        return loss_dyn_dyn, loss_dyn_sta
 
     def loom_sta(
         self, 
@@ -751,7 +755,7 @@ class CritiGraph(torch.nn.Module):
                 cnc_loc = self.connection(sta_loc, dev_num=sid)
                 # print("dyn_cnc_loc", cnc_loc[0, :5, 0])
                 
-                loss_dyn_dyn, loss_dyn_sta, loss_dyn_gt = self.loom_dyn(
+                loss_dyn_dyn, loss_dyn_sta = self.loom_dyn(
                     cur_tar,
                     cnc_loc,
                     sta_loc, pos_loc,
@@ -759,12 +763,12 @@ class CritiGraph(torch.nn.Module):
                     None, sid, "train"
                 )
                 if self.use_dyn_sta:
-                    loss_total = ratio_dyn * loss_dyn_dyn + ratio_sta * loss_dyn_sta + ratio_gt * loss_dyn_gt
+                    loss_total = ratio_dyn * loss_dyn_dyn + ratio_sta * loss_dyn_sta # + ratio_gt * loss_dyn_gt
                 else:
                     loss_total = loss_dyn_dyn
 
-                selected_locs, tot_dyn_loss, dyn_dyn_loss, dyn_sta_loss, dyn_gt_loss = self.get_best_loc(
-                    cnc_loc, loss_total, loss_dyn_dyn, loss_dyn_sta, loss_dyn_gt, sid
+                selected_locs, tot_dyn_loss, dyn_dyn_loss, dyn_sta_loss, _ = self.get_best_loc(
+                    cnc_loc, loss_total, loss_dyn_dyn, loss_dyn_sta, None, sid
                 )
 
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
@@ -785,7 +789,7 @@ class CritiGraph(torch.nn.Module):
                 self.tot_dyn_loss[train_slice]        = tot_dyn_loss.to(main_device, non_blocking=True)
                 self.dyn_dyn_loss[train_slice]        = dyn_dyn_loss.to(main_device, non_blocking=True)
                 self.dyn_sta_loss[train_slice]        = dyn_sta_loss.to(main_device, non_blocking=True)
-                self.dyn_gt_loss [train_slice]        = dyn_gt_loss .to(main_device, non_blocking=True)
+                # self.dyn_gt_loss [train_slice]        = dyn_gt_loss .to(main_device, non_blocking=True)
 
                 write_done_event = torch.cuda.Event(enable_timing=False, blocking=False)
                 write_done_event.record(write_stream)
@@ -952,13 +956,19 @@ class CritiGraph(torch.nn.Module):
                 # 限制 read 的最大超前
                 read_stream.wait_event(prev_write_done_list[0])
 
-                _dyn_idx = self.valid_sampler.get_connection(valid_block)  # (T_valid, N_dynbr)
+                _dyn_idx, _voc_idx = self.valid_sampler.get_connection(valid_block)  # (T_valid, N_dynbr), (T_valid, N_stnbr)
 
                 _sta_loc = self.valid_locations[valid_slice]
-                _pos_loc = self.train_locations[_dyn_idx]
+                _pos_loc = torch.cat([
+                    self.train_locations[_dyn_idx],
+                    self.vocab_locations[_voc_idx],
+                ], dim=1)
 
                 _sta_emb = self.valid_emb[valid_slice]
-                _pos_emb = self.train_emb[_dyn_idx]
+                _pos_emb = torch.cat([
+                    self.train_emb[_dyn_idx],
+                    self.vocab_emb[_voc_idx],
+                ], dim=1)
 
                 data_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
                 data_ready_event.record(read_stream)
@@ -977,7 +987,7 @@ class CritiGraph(torch.nn.Module):
 
                 cnc_loc = self.connection(sta_loc, dev_num=sid)
 
-                loss_dyn_dyn, _, _ = self.loom_dyn(
+                loss_dyn_dyn, loss_dyn_sta = self.loom_dyn(
                     None,
                     cnc_loc,
                     sta_loc, pos_loc,
@@ -986,10 +996,10 @@ class CritiGraph(torch.nn.Module):
                     "valid"
                 )
 
-                loss_total = loss_dyn_dyn
+                loss_total = ratio_dyn * loss_dyn_dyn + ratio_sta * loss_dyn_sta
 
-                selected_locs, dyn_dyn_loss, _, _, _ = self.get_best_loc(
-                    cnc_loc, loss_total, None, None, None, sid
+                selected_locs, tot_dyn_loss, dyn_dyn_loss, dyn_sta_loss, _ = self.get_best_loc(
+                    cnc_loc, loss_total, loss_dyn_dyn, loss_dyn_sta, None, sid
                 )
 
                 comp_ready_event = torch.cuda.Event(enable_timing=False, blocking=False)
@@ -1003,7 +1013,9 @@ class CritiGraph(torch.nn.Module):
                 write_stream.wait_event(comp_ready_event)
 
                 self.new_valid_locations[valid_slice] = selected_locs.to(main_device, non_blocking=True)
-                self.tot_dyn_loss       [valid_slice] = dyn_dyn_loss.to(main_device, non_blocking=True)
+                self.tot_dyn_loss       [valid_slice] = tot_dyn_loss.to(main_device, non_blocking=True)
+                self.dyn_dyn_loss       [valid_slice] = dyn_dyn_loss.to(main_device, non_blocking=True)
+                self.dyn_sta_loss       [valid_slice] = dyn_sta_loss.to(main_device, non_blocking=True)
 
                 # 更新写完成事件窗口
                 write_done_event = torch.cuda.Event(enable_timing=False, blocking=False)
@@ -1078,7 +1090,7 @@ class CritiGraph(torch.nn.Module):
 
         self.dyn_dyn_loss  = torch.zeros(N_train, device=main_device)
         self.dyn_sta_loss  = torch.zeros(N_train, device=main_device)
-        self.dyn_gt_loss   = torch.zeros(N_train, device=main_device)
+        # self.dyn_gt_loss   = torch.zeros(N_train, device=main_device)
         self.tot_dyn_loss  = torch.zeros(N_train, device=main_device)
         self.sta_sta_loss  = torch.zeros(N_vocab, device=main_device)
 
@@ -1156,7 +1168,7 @@ class CritiGraph(torch.nn.Module):
             ### step 3.4: 记录与打印
             loss_split_record.dyn_dyn_loss = self.dyn_dyn_loss.sum().item() / N_train
             loss_split_record.dyn_sta_loss = self.dyn_sta_loss.sum().item() / N_train
-            loss_split_record.dyn_gt_loss  = self.dyn_gt_loss .sum().item() / N_train
+            # loss_split_record.dyn_gt_loss  = self.dyn_gt_loss .sum().item() / N_train
             loss_split_record.tot_dyn_loss = self.tot_dyn_loss.sum().item() / N_train
             loss_split_record.sta_sta_loss = self.sta_sta_loss.sum().item() / N_vocab
             
@@ -1239,6 +1251,8 @@ class CritiGraph(torch.nn.Module):
         
         self.valid_sampler = ValidSampler(train_data['expander_graph'], valid_top)
 
+        self.dyn_dyn_loss  = torch.zeros(N_valid, device=main_device)
+        self.dyn_sta_loss  = torch.zeros(N_valid, device=main_device)
         self.tot_dyn_loss  = torch.zeros(N_valid, device=main_device)
 
         self.train_locations     = train_data['train_locations'].to(main_device)
@@ -1275,6 +1289,8 @@ class CritiGraph(torch.nn.Module):
             self.cur_epoch = cur_epoch
             self.converge  = valid_converge is not None and (self.cur_epoch >= valid_converge)
             loss_split_record = ValidLossRecord()
+            loss_split_record.dyn_dyn_loss = 0.0
+            loss_split_record.dyn_sta_loss = 0.0
             loss_split_record.tot_dyn_loss = 0.0
             
             if cur_epoch % valid_graph_reset == 0 and cur_epoch != 0:
@@ -1302,6 +1318,8 @@ class CritiGraph(torch.nn.Module):
             mark(ED, "epoch_pos_train", father="epoch")
             
             ### step 3.4: 记录与打印
+            loss_split_record.dyn_dyn_loss = self.dyn_dyn_loss.sum().item() / N_valid
+            loss_split_record.dyn_sta_loss = self.dyn_sta_loss.sum().item() / N_valid
             loss_split_record.tot_dyn_loss = self.tot_dyn_loss.sum().item() / N_valid
             
             print(f"epoch {cur_epoch:3d} summary:", end=" ")
@@ -1315,15 +1333,17 @@ class CritiGraph(torch.nn.Module):
             
             ### step 3.5: 验证
             mark(ST, "epoch_valid")
-            if cur_epoch % val_interval == 0 or cur_epoch == train_epoch_num - 1:
+            if cur_epoch % val_interval == 0 or cur_epoch == valid_epoch_num - 1:
                 self.print_cross_entropy_loss(cur_epoch, "valid")
             mark(ED, "epoch_valid", father="epoch")
             mark(ED, "epoch")
             
             ### step 3.6: 可视化
-            if cur_epoch % vis_interval == 0 or cur_epoch == train_epoch_num - 1:
+            if cur_epoch % vis_interval == 0 or cur_epoch == valid_epoch_num - 1:
                 self.visualize(cur_epoch, "valid")
                 self.print_dyn_dyn_tot_loss(cur_epoch, "valid")
+                self.print_dyn_sta_tot_loss(cur_epoch, "valid")
+                # self.visualize_dyn_sta_mds_tsne(cur_epoch)
         
         for thread in threads:
             thread.join()
@@ -1343,84 +1363,106 @@ class CritiGraph(torch.nn.Module):
     
     
     def print_dyn_dyn_tot_loss(self, epoch: int, cur_type: str):
-        # === 计算 dyn-dyn 总 loss ===
-        # 这里指的是全局的，也即，(N_train, N_train) 那么大的 loss 矩阵，或者 (N_valid, N_train) 那么大的 loss 矩阵
-        # 与 sta 无关，单纯重新计算 dyn-dyn loss
-        # 一种 loss，其中 softmax 就用一般的温度
-        
-        def get_eu_ct_val(o_block, i_block, cur_type: str):
+        # === 计算 dyn-dyn 总 loss（softmax 版）===
+        # (N_train, N_train) or (N_valid, N_train)
+        # 使用 softmax(KL) 而不是 sqrt 后的 L1
+
+        def get_eu_ct_val(o_block, i_block, cur_type: str, type: str = "ori"):
             if cur_type == "train":
                 sta_loc = self.train_locations[o_block[0]:o_block[1]]
-                sta_emb = self.train_emb      [o_block[0]:o_block[1]]
+                sta_emb = self.train_emb[o_block[0]:o_block[1]]
             else:
                 sta_loc = self.valid_locations[o_block[0]:o_block[1]]
-                sta_emb = self.valid_emb      [o_block[0]:o_block[1]]
-            
+                sta_emb = self.valid_emb[o_block[0]:o_block[1]]
+
             pos_loc = self.train_locations[i_block[0]:i_block[1]]
-            pos_emb = self.train_emb      [i_block[0]:i_block[1]]
-            
-            
+            pos_emb = self.train_emb[i_block[0]:i_block[1]]
+
             eu_val = sta_emb @ pos_emb.t()    # (T_outer, T_inner)
             ct_val = self.cos_similarity(
                 sta_loc[:, None, :],
                 pos_loc[None, :, :],
-            ).mean(dim=-1)   # (T_outer, T_inner)
-            
-            assert -1.0 <= ct_val.min() - 1e-3 and ct_val.max() - 1e-3 <= 1.0, f"ct_val 超出范围: [{ct_val.min().item()}, {ct_val.max().item()}]"
-            assert -1.0 <= eu_val.min() - 1e-3 and eu_val.max() - 1e-3 <= 1.0, f"eu_val 超出范围: [{eu_val.min().item()}, {eu_val.max().item()}]"
-            
-            eu_val = torch.sqrt((1. - (eu_val - 1e-3)) / 2.)
-            ct_val = torch.sqrt((1. - (ct_val - 1e-3)) / 2.)
-            
-            
-            
-            return eu_val, ct_val
-            
-        # 在函数开头新增：单个 loss 的直方图统计  
-        l1_loss  = 0
-        
-        outer_splits = make_splits(0, N_train, 1024) if cur_type == "train" else make_splits(0, N_valid, 1024)
-        inner_splits = make_splits(0, N_train, 1024)
-        
-        num_bins = 1000
-        hist_range = (0.0, 1.0)   # 固定范围
-        bin_width = (hist_range[1] - hist_range[0]) / num_bins
+            ).mean(dim=-1)
 
-        # 直方图（分布）累积
-        l1_hist  = torch.zeros(num_bins, device=main_device, dtype=torch.float64)
+            assert -1.0 <= eu_val.min() - 1e-3 and eu_val.max() - 1e-3 <= 1.0
+            assert -1.0 <= ct_val.min() - 1e-3 and ct_val.max() - 1e-3 <= 1.0
+
+            if type == "ori":
+                return eu_val, ct_val
+            else:
+                raise ValueError("dyn-dyn only uses ori values")
+
+        # ------------------------------------------------
+        outer_splits = make_splits(0, N_train, 1024) if cur_type == "train" \
+                    else make_splits(0, N_valid, 1024)
+        inner_splits = make_splits(0, N_train, 1024)
+
+        total_loss = 0.0
+        total_outer = 0
+
+        # 直方图：统计每个 outer 的 KL
+        num_bins = 1000
+        hist_range = (0.0, 1.0)
+        bin_width = (hist_range[1] - hist_range[0]) / num_bins
+        kl_hist = torch.zeros(num_bins, device=main_device, dtype=torch.float64)
 
         def update_hist(values: torch.Tensor, hist_tensor: torch.Tensor):
-            # values flatten
-            v = values.flatten()
-            # clip to [0,1]
-            if torch.any(v + 1e-3 < 0) or torch.any(v - 1e-3 > 1):
-                print(f"{torch.sum(v + 1e-3 < 0).item()} / {len(v)} values < 0, {torch.sum(v - 1e-3 > 1).item()} / {len(v)} values > 1 ")
-                print(f"values min: {v.min().item()}, max: {v.max().item()}")
-            
-            v = torch.clamp(v, 0.0, 1.0)
-            # compute indices
-            idx = (v / bin_width).long()
-            idx = torch.clamp(idx, 0, num_bins - 1)
-            # 用 bincount 累积
+            v = torch.clamp(values, 0.0, 1.0)
+            idx = (v / bin_width).long().clamp(0, num_bins - 1)
             hist_tensor += torch.bincount(idx, minlength=num_bins).to(hist_tensor.dtype)
 
-
-        # ============ main loop ============
-
+        # ------------------------------------------------
         for o_block in outer_splits:
+            T_outer = o_block[1] - o_block[0]
+
+            # ---------- Pass 1: 计算 softmax 分母 ----------
+            exp_sum_eu = torch.zeros(T_outer, device=main_device)
+            exp_sum_ct = torch.zeros(T_outer, device=main_device)
 
             for i_block in inner_splits:
-                eu_val, ct_val = get_eu_ct_val(o_block, i_block, cur_type)
+                eu_val, ct_val = get_eu_ct_val(o_block, i_block, cur_type, type="ori")
 
-                cur_l1 = torch.abs(eu_val - ct_val)
-                l1_loss += cur_l1.sum().item()
+                eu_logits = 20.0 * eu_val / temperature          # (T_outer, T_inner)
+                ct_logits = 20.0 * ct_val / temperature
 
-                # 追加 L1 / L2 histogram 统计
-                update_hist(cur_l1, l1_hist)
+                exp_sum_eu += torch.exp(eu_logits).sum(dim=1)
+                exp_sum_ct += torch.exp(ct_logits).sum(dim=1)
 
-        visualize_loss_hist(l1_hist, "L1", num_bins=100, save_path=os.path.join(vis_path, f"dd_{cur_type}_l1_hist_epoch_{epoch:04d}.png"))
-        print(f"{cur_type:5s} dyn-dyn L1 loss: {l1_loss / (N_train if cur_type == 'train' else N_valid) **2 :.6f}")
+            # ---------- Pass 2: 累 KL ----------
+            kl_outer = torch.zeros(T_outer, device=main_device)
 
+            for i_block in inner_splits:
+                eu_val, ct_val = get_eu_ct_val(o_block, i_block, cur_type, type="ori")
+
+                eu_logits = 20.0 * eu_val / temperature
+                ct_logits = 20.0 * ct_val / temperature
+
+                exp_eu = torch.exp(eu_logits)
+                exp_ct = torch.exp(ct_logits)
+
+                p_eu = exp_eu / exp_sum_eu[:, None]
+
+                # KL 累加项
+                kl_outer += (p_eu * (
+                    (eu_logits - torch.log(exp_sum_eu[:, None])) -
+                    (ct_logits - torch.log(exp_sum_ct[:, None]))
+                )).sum(dim=1)
+
+            total_loss += kl_outer.sum().item()
+            total_outer += T_outer
+
+            update_hist(kl_outer.detach(), kl_hist)
+
+
+        # visualize_loss_hist(
+        #     kl_hist,
+        #     "KL",
+        #     num_bins=100,
+        #     save_path=os.path.join(vis_path, f"dd_{cur_type}_kl_hist_epoch_{epoch:04d}.png")
+        # )
+
+        avg_loss = total_loss / total_outer
+        print(f"{cur_type:5s} dyn-dyn KL loss: {avg_loss:.6f}")
 
     def print_dyn_sta_tot_loss(self, epoch: int, cur_type: str):
         # === 计算 dyn-sta 总 loss ===
@@ -1454,54 +1496,11 @@ class CritiGraph(torch.nn.Module):
             
             
             return eu_val, ct_val
-            
-        # 在函数开头新增：单个 loss 的直方图统计  
-        l1_loss  = 0
-        
-        splits = make_splits(0, N_train, 1024) if cur_type == "train" else make_splits(0, N_valid, 1024)
-        
-        num_bins = 1000
-        hist_range = (0.0, 1.0)   # 固定范围
-        bin_width = (hist_range[1] - hist_range[0]) / num_bins
-
-        # 直方图（分布）累积
-        l1_hist  = torch.zeros(num_bins, device=main_device, dtype=torch.float64)
-
-        def update_hist(values: torch.Tensor, hist_tensor: torch.Tensor):
-            # values flatten
-            v = values.flatten()
-            # clip to [0,1]
-            if torch.any(v + 1e-3 < 0) or torch.any(v - 1e-3 > 1):
-                print(f"{torch.sum(v + 1e-3 < 0).item()} / {len(v)} values < 0, {torch.sum(v - 1e-3 > 1).item()} / {len(v)} values > 1 ")
-                print(f"values min: {v.min().item()}, max: {v.max().item()}")
-            
-            v = torch.clamp(v, 0.0, 1.0)
-            # compute indices
-            idx = (v / bin_width).long()
-            idx = torch.clamp(idx, 0, num_bins - 1)
-            # 用 bincount 累积
-            hist_tensor += torch.bincount(idx, minlength=num_bins).to(hist_tensor.dtype)
 
 
-        # ============ main loop ============
-
-        for block in splits:
-
-            eu_val, ct_val = get_eu_ct_val(block, cur_type)
-
-            cur_l1 = torch.abs(eu_val - ct_val)
-            l1_loss += cur_l1.sum().item()
-
-            # 追加 L1 / L2 histogram 统计
-            update_hist(cur_l1, l1_hist)
-
-        visualize_loss_hist(l1_hist, "L1", num_bins=100, save_path=os.path.join(vis_path, f"ds_{cur_type}_l1_hist_epoch_{epoch:04d}.png"))
-        print(f"{cur_type:5s} dyn-sta L1 loss: {l1_loss / (N_train if cur_type == 'train' else N_valid) **2 :.6f}")
-
-
-        # ============================================================
-        # 追加可视化：抽取若干 token，看它们与 static 的损失曲线
-        # ============================================================
+        # # ============================================================
+        # # 追加可视化：抽取若干 token，看它们与 static 的损失曲线
+        # # ============================================================
 
         def visualize_dyn_sta_detail(cur_type: str, epoch: int, num_samples: int = 5):
             # 1. 获取数据源
@@ -1626,11 +1625,11 @@ class CritiGraph(torch.nn.Module):
                 plt.ylim(0.0, 1.0)
 
             # 保存图像
-            out_path = os.path.join(vis_path, f"ds_{cur_type}_sample_curve_epoch_{epoch:04d}.png")
+            out_path = os.path.join(vis_path, f"{cur_type}_sample_curve_epoch_{epoch:04d}.png")
             plt.tight_layout()
             plt.savefig(out_path, dpi=150)
             plt.close()
-            print(f"[OK] saved dyn-sta detail vis to {out_path}")
+            # print(f"[OK] saved dyn-sta detail vis to {out_path}")
 
 
         visualize_dyn_sta_detail(cur_type, epoch, num_samples=5)
@@ -1740,42 +1739,187 @@ class CritiGraph(torch.nn.Module):
 
     def visualize(self, epoch: int, cur_type: str):
         if cur_type == "train":
-            train_eu_emb = self.train_emb[:256]                          # (256, dim)
-            train_ct_emb = self.train_locations[:256]                    # (256, tp)
+            train_eu_emb = self.train_emb[:256]                    # (256, dim)
+            train_ct_emb = self.train_locations[:256]              # (256, tp)
             vocab_eu_emb = self.vocab_emb                          # (256, dim)
             vocab_ct_emb = self.vocab_locations                    # (256, tp)
             
-            S_tt_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
-            S_tt_ct      = self.cos_similarity(train_ct_emb[:, None, :], train_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
-            S_vv_eu      = normalized_matmul(vocab_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
-            S_vv_ct      = self.cos_similarity(vocab_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            S_dd_eu      = normalized_matmul(train_eu_emb, train_eu_emb.t())[0].cpu().numpy()
+            S_dd_ct      = self.cos_similarity(train_ct_emb[:, None, :], train_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            S_ss_eu      = normalized_matmul(vocab_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            S_ss_ct      = self.cos_similarity(vocab_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            S_ds_eu      = normalized_matmul(train_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            S_ds_ct      = self.cos_similarity(train_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
             
-            visualize_similarity(S_tt_eu, S_tt_ct, meta_name="{}" + "by_eu_train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
-            visualize_similarity(S_tt_ct, S_tt_ct, meta_name="{}" + "by_ct_train_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
-            visualize_similarity(S_vv_eu, S_vv_ct, meta_name="{}" + "by_eu_vocab_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
-            
-            
-            # S_vv_eu      = normalized_matmul(vocab_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
-            # S_vv_ct      = self.cos_similarity(vocab_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
-            # visualize_similarity(S_vv_eu, S_vv_ct, meta_name="{}" + "vocab_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
-            
-            # S_tv_eu      = normalized_matmul(train_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
-            # S_tv_ct      = self.cos_similarity(train_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
-            # visualize_pair_bihclust(S_tv_eu, S_tv_ct, meta_name="{}" + "train_vocab_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
-            
+            visualize_similarity   (S_dd_eu, S_dd_ct, meta_name="train_et_dd_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            visualize_similarity   (S_ss_eu, S_ss_ct, meta_name="train_et_ss_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            visualize_pair_bihclust(S_ds_eu, S_ds_ct, meta_name="train_et_ds_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+
             
 
         elif cur_type == "valid":
-            train_eu_emb = self.train_emb[:256]                        # (256, dim)
-            train_ct_emb = self.train_locations[:256]                         # (256, tp)
-            valid_eu_emb = self.valid_emb[:256]  # (256, dim)
-            valid_ct_emb = self.valid_locations[:256]  # (256, tp)
-        
-            S_vt_eu      = normalized_matmul(valid_eu_emb, train_eu_emb.t())[0].cpu().numpy()
-            S_vt_ct      = self.cos_similarity(valid_ct_emb[:, None, :], train_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            train_eu_emb = self.train_emb[:256]                    # (256, dim)
+            train_ct_emb = self.train_locations[:256]              # (256, tp)
+            valid_eu_emb = self.valid_emb[:256]                    # (256, dim)
+            valid_ct_emb = self.valid_locations[:256]              # (256, tp)
+            vocab_eu_emb = self.vocab_emb                          # (256, dim)
+            vocab_ct_emb = self.vocab_locations                    # (256, tp)
 
-            visualize_pair_bihclust(S_vt_eu, S_vt_ct, meta_name="{}" + "valid_train_{}_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            S_dd_eu      = normalized_matmul(valid_eu_emb, train_eu_emb.t())[0].cpu().numpy()
+            S_dd_ct      = self.cos_similarity(valid_ct_emb[:, None, :], train_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            S_ds_eu      = normalized_matmul(valid_eu_emb, vocab_eu_emb.t())[0].cpu().numpy()
+            S_ds_ct      = self.cos_similarity(valid_ct_emb[:, None, :], vocab_ct_emb[None, :, :]).mean(dim=-1).cpu().numpy()
+            
+            visualize_pair_bihclust(S_dd_eu, S_dd_ct, meta_name="valid_et_dd_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            visualize_pair_bihclust(S_ds_eu, S_ds_ct, meta_name="valid_et_ds_" + f"epoch_{epoch:04d}" + ".png", save_eu=(epoch == 0))
+            
+    
+    def visualize_dyn_sta_mds_tsne(
+        self,
+        epoch: int,
+        K_train: int = 1024,
+        K_valid: int = 1024,
+    ):
+        """
+        MDS + t-SNE visualization for train / valid / vocab
+        Only called at valid stage.
+        """
 
+        # ------------------------------------------------
+        # 1. 采样点
+        # ------------------------------------------------
+        train_idx = torch.randperm(N_train)[:K_train]
+        valid_idx = torch.randperm(N_valid)[:K_valid]
+        vocab_idx = torch.arange(N_vocab)
+
+        # embeddings / locations
+        train_emb = self.train_emb[train_idx]
+        valid_emb = self.valid_emb[valid_idx]
+        vocab_emb = self.vocab_emb
+
+        train_loc = self.train_locations[train_idx]
+        valid_loc = self.valid_locations[valid_idx]
+        vocab_loc = self.vocab_locations
+
+        # ------------------------------------------------
+        # 2. 构造联合集合
+        # ------------------------------------------------
+        all_emb = torch.cat([train_emb, valid_emb, vocab_emb], dim=0)
+        all_loc = torch.cat([train_loc, valid_loc, vocab_loc], dim=0)
+
+        N_total = all_emb.shape[0]
+
+        # ------------------------------------------------
+        # 3. 计算 pairwise similarity / distance
+        # ------------------------------------------------
+        # similarity in [-1,1]
+        sim = self.cos_similarity(
+            all_loc[:, None, :],
+            all_loc[None, :, :]
+        ).mean(dim=-1)   # (N_total, N_total)
+
+        dist = (1 - (sim - 1e-3)) / 2.
+
+        dist = dist.cpu().numpy()
+
+        # ------------------------------------------------
+        # 4. 计算 valid 的 old / now right
+        # ------------------------------------------------
+        # 复用你已有的逻辑
+        valid_targets = self.valid_tar[valid_idx]
+
+        # teacher
+        eu_logits = 20. * (valid_emb @ vocab_emb.t())
+        pred_old = eu_logits.argmax(dim=-1)
+
+        # student
+        ct_val = self.cos_similarity(
+            valid_loc[:, None, :],
+            vocab_loc[None, :, :]
+        ).mean(dim=-1)
+
+        if use_eu_norm:
+            eu_norm = (
+                torch.norm(valid_emb, dim=-1, keepdim=True)
+                @ torch.norm(vocab_emb, dim=-1, keepdim=True).t()
+            )
+        else:
+            eu_norm = torch.ones_like(ct_val) * 20.
+
+        ct_logits = ct_val * eu_norm
+        pred_now = ct_logits.argmax(dim=-1)
+
+        old_right = (pred_old == valid_targets)
+        now_right = (pred_now == valid_targets)
+
+        # ------------------------------------------------
+        # 5. 计算 MDS / t-SNE
+        # ------------------------------------------------
+        from sklearn.manifold import MDS, TSNE
+
+        mds = MDS(
+            n_components=2,
+            dissimilarity="precomputed",
+            random_state=0,
+        )
+        xy_mds = mds.fit_transform(dist)
+
+        tsne = TSNE(
+            n_components=2,
+            metric="precomputed",
+            init="random",
+            random_state=0,
+            perplexity=30,
+        )
+        xy_tsne = tsne.fit_transform(dist)
+
+        # ------------------------------------------------
+        # 6. 绘图（示例：MDS）
+        # ------------------------------------------------
+        def plot_scatter(xy, name):
+            plt.figure(figsize=(8, 8))
+
+            # train
+            plt.scatter(
+                xy[:K_train, 0], xy[:K_train, 1],
+                c="blue", s=5, marker="o", label="train"
+            )
+
+            # valid
+            v_start = K_train
+            for i in range(K_valid):
+                x, y = xy[v_start + i]
+                if old_right[i] and now_right[i]:
+                    plt.scatter(x, y, c="red", marker="o", s=30)
+                elif (not old_right[i]) and now_right[i]:
+                    plt.scatter(x, y, c="red", marker="s", s=30)
+                elif (not old_right[i]) and (not now_right[i]):
+                    plt.scatter(x, y, edgecolors="red", facecolors="none", marker="o", s=30)
+                else:  # old right, now wrong
+                    plt.scatter(x, y, edgecolors="red", facecolors="none", marker="s", s=30)
+
+            # vocab
+            v_start = K_train + K_valid
+            plt.scatter(
+                xy[v_start:, 0], xy[v_start:, 1],
+                c="green", s=30, marker="o", label="vocab"
+            )
+
+            plt.title(f"{name}")
+            plt.axis("off")
+            plt.tight_layout()
+            plt.savefig(
+                os.path.join(
+                    vis_path,
+                    f"scatter_{name}_epoch_{epoch:04d}.png"
+                ),
+                dpi=150
+            )
+
+        plot_scatter(xy_mds, "MDS")
+        plot_scatter(xy_tsne, "t-SNE")
+
+            
     def _synchronize_all_streams(self):
         for id in range(torch.cuda.device_count()):
             device = torch.device(f'cuda:{id}') 

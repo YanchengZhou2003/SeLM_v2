@@ -109,9 +109,10 @@ class ValidSampler(BaseSample):
             [self.valid_top, self.expander_graph[random_indices]],
             dim=1
         )   # (N_valid, N_dynbr)
+        self.sta_graph = torch.arange(N_vocab, device=main_device).unsqueeze(0).repeat(N_valid, 1)          # (N_valid, N_stnbr)
 
     def get_connection(self, block: Tuple[int, int]) -> torch.Tensor:
-        return self.dyn_graph[block[0]:block[1]]
+        return self.dyn_graph[block[0]:block[1]], self.sta_graph[block[0]:block[1]]  # (T_valid, N_dynbr), (T_valid, N_stnbr)
 
     def reset_indices(self):
         random_indices = torch.randint  (0, N_train, (N_valid,), device=main_device) # (N_valid,)

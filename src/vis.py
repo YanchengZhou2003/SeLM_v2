@@ -36,8 +36,8 @@ def visualize_loss_hist(hist_tensor: torch.Tensor, name: str, num_bins: int = 10
     plt.show()
 
 def visualize_similarity(S_eu: np.ndarray, S_ct: np.ndarray, meta_name="", save_eu=True, loss_dyn_dyn=0.):
-    sim_ct_path = os.path.join(vis_path, meta_name.format("", "ct"))
-    sim_eu_path = os.path.join(vis_path, meta_name.format("_", "eu"))
+    sim_eu_path = os.path.join(vis_path, "_" + meta_name)
+    sim_ct_path = os.path.join(vis_path, meta_name)
     
     # --- 相似度矩阵 (eu) ---
     np.fill_diagonal(S_eu, 1.0)
@@ -199,8 +199,8 @@ def visualize_pair_bihclust(A, B, meta_name: str, save_eu,
     share_color_scale: 若为 True，则 A/B 共享同一 (vmin, vmax)，确保色彩对比可比
     返回：row_order, col_order, A_re, B_re
     """
-    sim_ct_path = os.path.join(vis_path, meta_name.format("", "ct"))
-    sim_eu_path = os.path.join(vis_path, meta_name.format("_", "eu"))
+    sim_ct_path = os.path.join(vis_path, meta_name)
+    sim_eu_path = os.path.join(vis_path, "_" + meta_name)
     
     A = np.asarray(A)
     B = np.asarray(B)
