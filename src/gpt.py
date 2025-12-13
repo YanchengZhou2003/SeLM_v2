@@ -666,11 +666,11 @@ def main_cte(
 
     #### step 3.2: CTE 训练与测试
 
-    if not valid_only and not os.path.exists(train_save_path.replace(".pt", f"_epoch{train_epoch_num}.pt")):
-        print("Not Found trained CTE model, start training...")
-        cte.train_all(
-            train_emb, train_top, vocab_emb, train_y
-        )
+    # if not valid_only and not os.path.exists(train_save_path.replace(".pt", f"_epoch{train_epoch_num}.pt")):
+    #     print("Not Found trained CTE model, start training...")
+    cte.train_all(
+        train_emb, train_top, vocab_emb, train_y
+    )
     if not train_only:
         for i in range(train_epoch_num // save_interval):
             train_epoch = (i + 1) * save_interval

@@ -1,23 +1,21 @@
 h=6
 N=16384
 N_vocab=65
-pos_ratio=0.875
-epoch_num=200
+epoch_num=100
 
 N_dynbr=512
 N_dynbr_v=512
 ratio_dyn=0.5
 ratio_sta=$(awk -v r="$ratio_dyn" 'BEGIN{printf "%.5f", 1.0 - r}')
 
-for tp in 36; do
+for tp in 1 2 4 6 8 12 16 20 26 32; do
     vis_path=./vis/vis_tp/tp_${tp}
     save_path=./ckpt/cte/cte_tp_${tp}.pt
 
-    T_valid=$((512 * 512 / N_dynbr_v))
-    T_train=$((256 * 512 / N_dynbr))
+    T_valid=1024
+    T_train=1024
     N_top_v=$((N_dynbr_v / 2))
     N_top=$((N_dynbr / 2))
-
     echo "Running experiment with tp=$tp"
 
     python -m src.gpt  \
@@ -26,7 +24,7 @@ for tp in 36; do
         --N_valid 16384         --T_valid $T_valid  \
         --N_dynbr   $N_dynbr    --N_top   $N_top   \
         --N_dynbr_v $N_dynbr_v  --N_top_v $N_top_v   \
-        --N_stnbr   $N_vocab    --pos_ratio $pos_ratio \
+        --N_stnbr   $N_vocab     \
         --ratio_dyn $ratio_dyn  --ratio_sta $ratio_sta --step_dyn 1 \
         --h $h --tp $tp --c 1 --cur_tp 2 --cur_portion 0.75\
         --train_epoch_num $epoch_num    --valid_epoch_num $epoch_num          \
@@ -39,7 +37,7 @@ for tp in 36; do
         --vis_path    $vis_path \
         --use_filter  0 \
         --train_save_path $save_path \
-        > ./logs/log_tp/tp_${tp}.log 2>&1
+        > ./logs/20251213/seperate_topk/tp_${tp}.log 2>&1
 
     echo "Completed experiment with tp=$tp"
 done
