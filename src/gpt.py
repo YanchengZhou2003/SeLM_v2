@@ -707,8 +707,8 @@ if __name__ == "__main__":
     # valid_cache_ckpt = gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
     # get_cte_train_and_test_by_ratio(gpt_ckpt, train_cache_ckpt, valid_cache_ckpt)
     
-    train_cache_ckpt = f"rk{N_top}_" + gpt_ckpt.replace(".pth", "") + f"_ps{pos_ratio}_train{N_train}_cache_last.pth"
-    valid_cache_ckpt = f"rk{N_top_v}_" + f"q=ps{pos_ratio}_train{N_train}_" + gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
+    train_cache_ckpt = f"rk{N_top}_" + gpt_ckpt.replace(".pth", "") + f"_train{N_train}_cache_last.pth"
+    valid_cache_ckpt = f"rk{N_top_v}_" + f"q=train{N_train}_" + gpt_ckpt.replace(".pth", "") + f"_valid{N_valid}_cache_last.pth"
     try:
         main_cte(train_cache_ckpt, valid_cache_ckpt, gpt_ckpt, N_train, N_valid)
     except Exception as e:

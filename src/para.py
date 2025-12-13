@@ -68,7 +68,7 @@ parser = argparse.ArgumentParser(description="Set hyperparameters for the model.
 parser.add_argument("--N_top"             , type=int,   default=256  , help="")
 parser.add_argument("--N_top_v"           , type=int,   default=256  , help="")
 
-parser.add_argument("--pos_ratio"         , type=float  , default=0.5,   help="")
+parser.add_argument("--pos_ratio"         , type=float  , default=None,   help="")
 
 parser.add_argument("--N_train"           , type=int,   default=2048 , help="")
 parser.add_argument("--T_train"           , type=int,   default=128,   help="")
